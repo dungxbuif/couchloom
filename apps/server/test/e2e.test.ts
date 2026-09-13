@@ -51,7 +51,8 @@ async function mcpCall(method: string, params: any, id = 1): Promise<any> {
 }
 
 async function callTool(name: string, args: any = {}): Promise<string> {
-    const resp = await mcpCall("tools/call", { name, arguments: args });
+    const scopedArgs = name === "list_vaults" ? args : { vault_id: "testvault", ...args };
+    const resp = await mcpCall("tools/call", { name, arguments: scopedArgs });
     const text = resp?.result?.content?.[0]?.text;
     assert.ok(text, `Tool ${name} returned no text content`);
     return text;
@@ -312,7 +313,7 @@ describe("E2E: MCP_INSTRUCTIONS", () => {
         await stopServer();
         await startServer({ VAULT_PATH: vaultDir, VAULT_NAME: "TestVault", MCP_INSTRUCTIONS: "inline-rule-XYZ" });
         const instr: string = lastInitResult?.result?.instructions ?? "";
-        assert.ok(instr.includes("Access an Obsidian vault"), "base instructions still present");
+        assert.ok(instr.includes("Access multiple Obsidian vaults"), "base instructions still present");
         assert.ok(instr.includes("inline-rule-XYZ"), "inline env contents appended");
     });
 
@@ -327,7 +328,7 @@ describe("E2E: MCP_INSTRUCTIONS", () => {
             MCP_INSTRUCTIONS_FILE: instructionsFile,
         });
         const instr: string = lastInitResult?.result?.instructions ?? "";
-        assert.ok(instr.includes("Access an Obsidian vault"), "base instructions still present");
+        assert.ok(instr.includes("Access multiple Obsidian vaults"), "base instructions still present");
         assert.ok(instr.includes("file-rule-ABC"), "file contents appended");
         assert.ok(instr.includes("file-rule-DEF"), "file contents appended (multiline)");
         assert.ok(!instr.includes("inline-rule-XYZ"), "inline env ignored when file is set");

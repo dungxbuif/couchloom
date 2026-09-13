@@ -31,6 +31,9 @@ VM100) or `VAULTS_CONFIG`. Each entry has a stable `id`, display `name`, and a
 `local` or `couchdb` connection. Legacy single-vault environment variables
 remain accepted during migration. See [`docs/MULTI_VAULT.md`](docs/MULTI_VAULT.md).
 
+Call `list_vaults` first. Every note operation requires the returned `vault_id`,
+for example `read_note(vault_id="personal", path="daily/today.md")`.
+
 ## Upstream behavior reference
 
 # Obsidian Sync MCP
@@ -235,6 +238,7 @@ Set `BASE_URL` to the tunnel URL when using authentication.
 
 | Tool | Description |
 |---|---|
+| `list_vaults` | List configured vault IDs and display names |
 | `read_note` | Read a note's markdown content by path |
 | `write_note` | Create or overwrite a note (replaces entire content) |
 | `edit_note` | Edit a note without rewriting it — append, prepend (after frontmatter), or replace exact text |

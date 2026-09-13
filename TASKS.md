@@ -4,7 +4,7 @@
   `@couchloom/core` and `@couchloom/server`; preserve current behavior.
 - [x] **2. Safe tool surface:** support read/create/edit and remove MCP
   delete/move tools.
-- [ ] **3. Multi-vault:** load multiple CouchDB databases from validated config
+- [x] **3. Multi-vault:** load multiple CouchDB databases from validated config
   and require `vault_id` in note tools.
 - [ ] **4. pgvector RAG:** chunk Markdown, create embeddings, persist vectors,
   and expose semantic search.

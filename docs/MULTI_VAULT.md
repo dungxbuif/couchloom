@@ -34,9 +34,9 @@ Example:
 ]
 ```
 
-The initial foundation commit adds validated configuration and a lifecycle-safe
-registry. The next integration commit changes MCP tools to require `vault_id`
-and starts an independent index/change worker for each registry entry.
+The runtime creates one backend, metadata index, persisted checkpoint, and
+change watcher per configured vault. MCP exposes `list_vaults`; every other
+note tool requires `vault_id` and resolves only that registry context.
 
 ## Verification
 

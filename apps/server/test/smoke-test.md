@@ -17,9 +17,10 @@ Run each step in order. Each step builds on the previous.
 ### 1. Discovery — list folders and tags
 
 ```
-list_folders()
-list_tags()
-list_notes(sort_by='modified', limit=5)
+list_vaults()
+list_folders(vault_id='testvault')
+list_tags(vault_id='testvault')
+list_notes(vault_id='testvault', sort_by='modified', limit=5)
 ```
 
 **Expected**: Folders listed with note counts. Tags listed (may be empty). Recent notes shown with timestamps and deep links.
@@ -29,7 +30,7 @@ list_notes(sort_by='modified', limit=5)
 ### 2. Create project notes with tags, links, and frontmatter
 
 ```
-write_note(path='test-smoke/project.md', content="""---
+write_note(vault_id='testvault', path='test-smoke/project.md', content="""---
 title: Smoke Test Project
 tags: [smoke-test, project]
 status: active
@@ -44,7 +45,7 @@ A project for testing MCP tools.
 - [[test-smoke/daily]]
 """)
 
-write_note(path='test-smoke/notes.md', content="""---
+write_note(vault_id='testvault', path='test-smoke/notes.md', content="""---
 tags: [smoke-test, reference]
 ---
 
@@ -55,7 +56,7 @@ Reference material for [[test-smoke/project]].
 CouchDB uses a _changes feed for real-time sync. Compaction removes old revisions.
 """)
 
-write_note(path='test-smoke/daily.md', content="""---
+write_note(vault_id='testvault', path='test-smoke/daily.md', content="""---
 tags: [smoke-test, daily]
 ---
 
@@ -77,8 +78,8 @@ See [[test-smoke/project]] for the main project.
 ### 3. Verify folder and tag discovery
 
 ```
-list_folders()
-list_tags()
+list_folders(vault_id='testvault')
+list_tags(vault_id='testvault')
 ```
 
 **Expected**: `test-smoke` folder appears with 3 notes. Tags include `smoke-test`, `project`, `reference`, `daily`, `standup`.
@@ -88,10 +89,10 @@ list_tags()
 ### 4. Name and tag filtering
 
 ```
-list_notes(name='notes')
-list_notes(tag='smoke-test')
-list_notes(tag='reference')
-list_notes(tag='daily', folder='test-smoke')
+list_notes(vault_id='testvault', name='notes')
+list_notes(vault_id='testvault', tag='smoke-test')
+list_notes(vault_id='testvault', tag='reference')
+list_notes(vault_id='testvault', tag='daily', folder='test-smoke')
 ```
 
 **Expected**: First finds notes with "notes" in path. Second returns all 3 test notes. Third returns only `test-smoke/notes.md`. Fourth finds `test-smoke/daily.md`.
@@ -101,7 +102,7 @@ list_notes(tag='daily', folder='test-smoke')
 ### 6. Knowledge graph — metadata and backlinks
 
 ```
-get_note_metadata(path='test-smoke/project.md')
+get_note_metadata(vault_id='testvault', path='test-smoke/project.md')
 ```
 
 **Expected**:
@@ -111,7 +112,7 @@ get_note_metadata(path='test-smoke/project.md')
 - Backlinks: test-smoke/notes.md, test-smoke/daily.md
 
 ```
-get_note_metadata(path='test-smoke/notes.md')
+get_note_metadata(vault_id='testvault', path='test-smoke/notes.md')
 ```
 
 **Expected**:
@@ -123,8 +124,8 @@ get_note_metadata(path='test-smoke/notes.md')
 ### 7. Edit — append
 
 ```
-edit_note(path='test-smoke/daily.md', content='- Append test passed')
-read_note(path='test-smoke/daily.md')
+edit_note(vault_id='testvault', path='test-smoke/daily.md', content='- Append test passed')
+read_note(vault_id='testvault', path='test-smoke/daily.md')
 ```
 
 **Expected**: "Append test passed" appears at end of note.
@@ -134,8 +135,8 @@ read_note(path='test-smoke/daily.md')
 ### 8. Edit — prepend (after frontmatter)
 
 ```
-edit_note(path='test-smoke/project.md', content='> Status: All tests passing', operation='prepend')
-read_note(path='test-smoke/project.md')
+edit_note(vault_id='testvault', path='test-smoke/project.md', content='> Status: All tests passing', operation='prepend')
+read_note(vault_id='testvault', path='test-smoke/project.md')
 ```
 
 **Expected**: "> Status: All tests passing" appears after frontmatter, before "# Smoke Test Project".
@@ -145,8 +146,8 @@ read_note(path='test-smoke/project.md')
 ### 9. Edit — replace
 
 ```
-edit_note(path='test-smoke/project.md', content='status: complete', operation='replace', old_text='status: active')
-read_note(path='test-smoke/project.md')
+edit_note(vault_id='testvault', path='test-smoke/project.md', content='status: complete', operation='replace', old_text='status: active')
+read_note(vault_id='testvault', path='test-smoke/project.md')
 ```
 
 **Expected**: Frontmatter now shows `status: complete`.
@@ -167,13 +168,13 @@ tools/list
 ### 11. Time-based filtering
 
 ```
-list_notes(modified_after='2020-01-01', sort_by='modified', limit=3)
+list_notes(vault_id='testvault', modified_after='2020-01-01', sort_by='modified', limit=3)
 ```
 
 **Expected**: Returns up to 3 most recently modified notes.
 
 ```
-list_notes(modified_after='invalid-date')
+list_notes(vault_id='testvault', modified_after='invalid-date')
 ```
 
 **Expected**: Error message about invalid date format.

@@ -1,8 +1,7 @@
 import type { FastMCP } from "fastmcp";
 import { z } from "zod";
 import { makeDeepLink } from "./deeplink.js";
-import type { VaultBackend } from "./vault-backend.js";
-import type { SearchIndex } from "./search.js";
+import type { VaultRegistry } from "./vault-registry.js";
 import { isPathWritable } from "./write-scope.js";
 
 const debugLogging = process.env.LOG_LEVEL === "debug";
@@ -11,9 +10,7 @@ const WRITE_TOOLS = ["write_note", "edit_note"] as const;
 
 export function registerTools(
     server: FastMCP,
-    vault: VaultBackend,
-    searchIndex: SearchIndex,
-    vaultName: string,
+    registry: VaultRegistry,
     readOnly = false,
     writeFolders: string[] | null = null,
 ) {
@@ -40,18 +37,26 @@ export function registerTools(
         return _addTool(tool);
     };
     server.addTool({
+        name: "list_vaults",
+        description: "List vaults available to this MCP client. Use the returned id as vault_id in every note tool.",
+        parameters: z.object({}),
+        execute: async () => registry.list().map(({ id, name }) => `- ${id}: ${name}`).join("\n"),
+    });
+    server.addTool({
         name: "read_note",
         description:
             "Read the content of a note from the Obsidian vault. Returns the markdown content and a deep link to open it in Obsidian.",
         parameters: z.object({
+            vault_id: z.string().describe("Vault id from list_vaults"),
             path: z.string().describe("Vault-relative path to the note, e.g. 'daily/2026-03-23.md'"),
         }),
-        execute: async ({ path }) => {
-            const content = await vault.readNote(path);
+        execute: async ({ vault_id, path }) => {
+            const { backend, name } = registry.get(vault_id);
+            const content = await backend.readNote(path);
             if (content === null) {
                 return `Note not found: ${path}`;
             }
-            const deepLink = makeDeepLink(vaultName, path);
+            const deepLink = makeDeepLink(name, path);
             return `[Open in Obsidian](${deepLink})\n\n---\n\n${content}`;
         },
     });
@@ -61,17 +66,19 @@ export function registerTools(
         description:
             "Write or update a note in the Obsidian vault. Creates the note if it doesn't exist. Replaces the entire content if it does — read first if you need to preserve existing content." + writeScopeNote,
         parameters: z.object({
+            vault_id: z.string().describe("Vault id from list_vaults"),
             path: z.string().describe("Vault-relative path to the note, e.g. 'daily/2026-03-23.md'"),
             content: z.string().describe("Full markdown content for the note"),
         }),
-        execute: async ({ path, content }) => {
+        execute: async ({ vault_id, path, content }) => {
+            const { backend, searchIndex, name } = registry.get(vault_id);
             if (!isPathWritable(path, writeFolders)) return denyWrite(path);
-            const ok = await vault.writeNote(path, content);
+            const ok = await backend.writeNote(path, content);
             if (!ok) {
                 return `Failed to write note: ${path}`;
             }
             searchIndex.update(path, content, Date.now());
-            const deepLink = makeDeepLink(vaultName, path);
+            const deepLink = makeDeepLink(name, path);
             return `Note saved: ${path}\n[Open in Obsidian](${deepLink})`;
         },
     });
@@ -80,6 +87,7 @@ export function registerTools(
         name: "list_notes",
         description: "List markdown notes in the vault with modification timestamps. Examples: list_notes(sort_by='modified', limit=10) for 10 most recent notes. list_notes(name='meeting') to find notes by name. list_notes(folder='daily') for a specific folder. list_notes(tag='project') for notes with a specific tag. Returns up to 100 notes by default.",
         parameters: z.object({
+            vault_id: z.string().describe("Vault id from list_vaults"),
             folder: z
                 .string()
                 .optional()
@@ -105,11 +113,12 @@ export function registerTools(
                 .optional()
                 .describe("Max number of notes to return. Default 100."),
         }),
-        execute: async ({ folder, name, tag, sort_by, modified_after, limit }) => {
+        execute: async ({ vault_id, folder, name, tag, sort_by, modified_after, limit }) => {
+            const { backend, searchIndex, name: vaultName } = registry.get(vault_id);
             // Use search index (works with encrypted vaults), fall back to vault
             let notes = searchIndex.listWithMtime(folder);
             if (notes.length === 0) {
-                notes = await vault.listNotesWithMtime(folder);
+                notes = await backend.listNotesWithMtime(folder);
             }
             if (name) {
                 const lower = name.toLowerCase();
@@ -148,11 +157,12 @@ export function registerTools(
         name: "list_folders",
         description:
             "List all folders in the vault. Use this to discover folder names before writing or listing notes. Returns the folder tree with note counts.",
-        parameters: z.object({}),
-        execute: async () => {
+        parameters: z.object({ vault_id: z.string().describe("Vault id from list_vaults") }),
+        execute: async ({ vault_id }) => {
+            const { backend, searchIndex } = registry.get(vault_id);
             let paths = searchIndex.listPaths();
             if (paths.length === 0) {
-                paths = await vault.listNotes();
+                paths = await backend.listNotes();
             }
             const folders = new Map<string, number>();
             for (const p of paths) {
@@ -182,8 +192,9 @@ export function registerTools(
         name: "list_tags",
         description:
             "List all tags used in the vault, sorted by frequency. Use this to discover tags before filtering with list_notes.",
-        parameters: z.object({}),
-        execute: async () => {
+        parameters: z.object({ vault_id: z.string().describe("Vault id from list_vaults") }),
+        execute: async ({ vault_id }) => {
+            const { searchIndex } = registry.get(vault_id);
             const tags = searchIndex.listAllTags();
             if (tags.length === 0) {
                 return "No tags found in the vault.";
@@ -199,6 +210,7 @@ export function registerTools(
         description:
             "Edit a note without rewriting it. Use 'append' (default) to add content to the end, 'prepend' to add after frontmatter, or 'replace' to swap old_text with new content. For replace, the old_text must match exactly once." + writeScopeNote,
         parameters: z.object({
+            vault_id: z.string().describe("Vault id from list_vaults"),
             path: z.string().describe("Vault-relative path to the note, e.g. 'daily/2026-03-25.md'"),
             content: z.string().describe("Text to append, prepend, or use as replacement for old_text"),
             operation: z
@@ -210,9 +222,10 @@ export function registerTools(
                 .optional()
                 .describe("Required for replace operation. Exact text to find and replace. Must match exactly once."),
         }),
-        execute: async ({ path, content: newContent, operation, old_text }) => {
+        execute: async ({ vault_id, path, content: newContent, operation, old_text }) => {
+            const { backend, searchIndex, name } = registry.get(vault_id);
             if (!isPathWritable(path, writeFolders)) return denyWrite(path);
-            const existing = await vault.readNote(path);
+            const existing = await backend.readNote(path);
             if (existing === null) {
                 return `Note not found: ${path}`;
             }
@@ -246,12 +259,12 @@ export function registerTools(
                 updated = existing.endsWith("\n") ? existing + newContent : existing + "\n" + newContent;
             }
 
-            const ok = await vault.writeNote(path, updated);
+            const ok = await backend.writeNote(path, updated);
             if (!ok) {
                 return `Failed to edit note: ${path}`;
             }
             searchIndex.update(path, updated, Date.now());
-            const deepLink = makeDeepLink(vaultName, path);
+            const deepLink = makeDeepLink(name, path);
             return `Note edited (${op}): ${path}\n[Open in Obsidian](${deepLink})`;
         },
     });
@@ -261,14 +274,16 @@ export function registerTools(
         description:
             "Get metadata about a note without reading its full content. Returns frontmatter, tags, outgoing links, backlinks (notes that link to this one), size, and timestamps. Use this to navigate the knowledge graph.",
         parameters: z.object({
+            vault_id: z.string().describe("Vault id from list_vaults"),
             path: z.string().describe("Vault-relative path to the note, e.g. 'projects/my-project.md'"),
         }),
-        execute: async ({ path }) => {
-            const meta = await vault.getMetadata(path);
+        execute: async ({ vault_id, path }) => {
+            const { backend, searchIndex, name } = registry.get(vault_id);
+            const meta = await backend.getMetadata(path);
             if (!meta) {
                 return `Note not found: ${path}`;
             }
-            const deepLink = makeDeepLink(vaultName, path);
+            const deepLink = makeDeepLink(name, path);
             const lines = [
                 `**${path}**`,
                 `Size: ${meta.size} bytes`,

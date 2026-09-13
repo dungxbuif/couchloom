@@ -1,318 +1,132 @@
 import { FastMCP } from "fastmcp";
-import { join } from "path";
-import { timingSafeEqual, createHash } from "crypto";
-import { readFileSync, statSync } from "fs";
-import { stat } from "fs/promises";
-import { setGlobalLogFunction, LEVEL_INFO } from "octagonal-wheels/common/logger";
-import {
-    LocalVault,
-    SearchIndex,
-    Vault,
-    applyIndexChange,
-    parseWriteFolders,
-    registerTools,
-    watchMarkdownFiles,
-    type VaultBackend,
-} from "@couchloom/core";
-import { mountPasswordAuth } from "./auth.js";
+import { timingSafeEqual } from "node:crypto";
+import { readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { LEVEL_INFO, setGlobalLogFunction } from "octagonal-wheels/common/logger";
+import { parseWriteFolders, registerTools, VaultRegistry } from "@couchloom/core";
+import { mountPasswordAuth, type AuthHandle } from "./auth.js";
 import { buildAllowedHosts, isHostAllowed, isOriginAllowed } from "./host-guard.js";
+import { loadVaultConfigs } from "./vault-config.js";
+import { VaultRuntime } from "./vault-runtime.js";
 
-// Suppress livesync-commonlib logs that expose vault file paths in production.
-// Set LOG_LEVEL=debug to see all library logs during development.
 const debugLogging = process.env.LOG_LEVEL === "debug";
 setGlobalLogFunction((message, level = LEVEL_INFO) => {
     if (level < LEVEL_INFO) return;
     if (!debugLogging && typeof message === "string") {
         if (/^(GET|PUT|DELETE|WATCH|FOLLOW|Sensible merge|Object merge):/.test(message)) return;
-        if (message.includes("replicator") || message.includes("Replicator") || message.includes("ReplicatorService")) return;
+        if (/replicator/i.test(message)) return;
     }
     console.log(message);
 });
 
-// --- Configuration from environment ---
-const VAULT_PATH = process.env.VAULT_PATH; // Local mode: path to vault directory
-const COUCHDB_URL = process.env.COUCHDB_URL;
-const COUCHDB_USER = process.env.COUCHDB_USER ?? "admin";
-const COUCHDB_PASSWORD = process.env.COUCHDB_PASSWORD;
-const COUCHDB_DATABASE = process.env.COUCHDB_DATABASE ?? "obsidian";
-const COUCHDB_PASSPHRASE = process.env.COUCHDB_PASSPHRASE || undefined;
-const COUCHDB_OBFUSCATE_PROPERTIES = process.env.COUCHDB_OBFUSCATE_PROPERTIES === "true";
-const VAULT_NAME = process.env.VAULT_NAME ?? "MyVault";
-const PORT = parseInt(process.env.PORT ?? "8787");
-const BASE_URL = process.env.BASE_URL ?? `http://localhost:${PORT}`;
-const AUTH_TOKEN = process.env.MCP_AUTH_TOKEN;
-const READ_ONLY = process.env.READ_ONLY === "true";
-const WRITE_FOLDERS = parseWriteFolders(process.env.WRITE_FOLDERS);
+const port = Number.parseInt(process.env.PORT ?? "8787", 10);
+const baseUrl = process.env.BASE_URL ?? `http://localhost:${port}`;
+const authToken = process.env.MCP_AUTH_TOKEN;
+const readOnly = process.env.READ_ONLY === "true";
+const writeFolders = parseWriteFolders(process.env.WRITE_FOLDERS);
+const baseDataDir = process.env.DATA_DIR ?? join(process.env.HOME ?? process.env.USERPROFILE ?? "/tmp", ".couchloom");
 
-// Extra instructions appended to the MCP `instructions` string.
-// File wins if both are set (loud warning); missing file is fatal.
-const MCP_INSTRUCTIONS_FILE = process.env.MCP_INSTRUCTIONS_FILE?.trim() || undefined;
-const MCP_INSTRUCTIONS_ENV = process.env.MCP_INSTRUCTIONS?.trim() || undefined;
-let MCP_EXTRA_INSTRUCTIONS: string | undefined;
-const MCP_INSTRUCTIONS_MAX_BYTES = 32 * 1024;
-if (MCP_INSTRUCTIONS_FILE) {
+function loadExtraInstructions(): string | undefined {
+    const file = process.env.MCP_INSTRUCTIONS_FILE?.trim();
+    const inline = process.env.MCP_INSTRUCTIONS?.trim();
+    if (!file) return inline || undefined;
     try {
-        const size = statSync(MCP_INSTRUCTIONS_FILE).size;
-        if (size > MCP_INSTRUCTIONS_MAX_BYTES) {
-            throw new Error(`file is ${size} bytes, exceeds ${MCP_INSTRUCTIONS_MAX_BYTES} byte cap`);
-        }
-        MCP_EXTRA_INSTRUCTIONS = readFileSync(MCP_INSTRUCTIONS_FILE, "utf8").trim() || undefined;
-    } catch (err) {
-        console.error(`Failed to read MCP_INSTRUCTIONS_FILE (${MCP_INSTRUCTIONS_FILE}): ${(err as Error).message}`);
+        const size = statSync(file).size;
+        if (size > 32 * 1024) throw new Error(`file is ${size} bytes, exceeds 32768 byte cap`);
+        if (inline) console.warn("MCP_INSTRUCTIONS_FILE is set; ignoring MCP_INSTRUCTIONS env var.");
+        return readFileSync(file, "utf8").trim() || undefined;
+    } catch (error) {
+        console.error(`Failed to read MCP_INSTRUCTIONS_FILE (${file}): ${(error as Error).message}`);
         process.exit(1);
     }
-    if (MCP_INSTRUCTIONS_ENV) {
-        console.warn("MCP_INSTRUCTIONS_FILE is set; ignoring MCP_INSTRUCTIONS env var.");
-    }
-} else if (MCP_INSTRUCTIONS_ENV) {
-    MCP_EXTRA_INSTRUCTIONS = MCP_INSTRUCTIONS_ENV;
 }
 
-// --- Initialize vault (local or remote) ---
-let vault: VaultBackend;
-
-if (VAULT_PATH) {
-    vault = new LocalVault(VAULT_PATH);
-    console.log(`Local mode: ${VAULT_PATH}`);
-} else if (COUCHDB_URL) {
-    if (!COUCHDB_PASSWORD) {
-        console.error("COUCHDB_PASSWORD is required in remote mode.");
-        process.exit(1);
-    }
-    vault = new Vault({
-        couchdbUrl: COUCHDB_URL,
-        couchdbUser: COUCHDB_USER,
-        couchdbPassword: COUCHDB_PASSWORD,
-        database: COUCHDB_DATABASE,
-        passphrase: COUCHDB_PASSPHRASE,
-        obfuscatePaths: COUCHDB_OBFUSCATE_PROPERTIES,
-    });
-    console.log(`Remote mode: ${COUCHDB_URL}`);
-} else {
-    console.error("Set VAULT_PATH for local mode or COUCHDB_URL for remote mode.");
+let configs;
+try {
+    configs = loadVaultConfigs();
+} catch (error) {
+    console.error(`Invalid vault configuration: ${(error as Error).message}`);
     process.exit(1);
 }
 
-await vault.init();
-console.log("Vault ready.");
-
-// --- Per-vault data directory ---
-const baseDataDir = process.env.DATA_DIR ?? join(process.env.HOME ?? process.env.USERPROFILE ?? "/tmp", ".obsidian-mcp");
-const vaultId = createHash("sha256").update(VAULT_NAME).digest("hex").slice(0, 12);
-const dataDir = join(baseDataDir, vaultId);
-
-// --- Search index ---
-const indexPath = join(dataDir, "search-index.json");
-const searchIndex = new SearchIndex(indexPath, COUCHDB_PASSPHRASE);
-
-// Load persisted metadata from disk
-await searchIndex.loadFromDisk();
-if (debugLogging) {
-    console.log(`[debug] Persisted metadata: ${searchIndex.size} notes, since: ${searchIndex.since || "(none)"}`);
+const runtimes = configs.map((config) => new VaultRuntime(config, baseDataDir, debugLogging));
+try {
+    await Promise.all(runtimes.map((runtime) => runtime.start()));
+} catch (error) {
+    await Promise.allSettled(runtimes.map((runtime) => runtime.close()));
+    console.error(`Vault startup failed: ${(error as Error).message}`);
+    process.exit(1);
 }
+const registry = new VaultRegistry(runtimes.map(({ context }) => context));
+console.log(`CouchLoom loaded ${registry.list().length} vault(s): ${registry.list().map(({ id }) => id).join(", ")}`);
 
-// Sync metadata in background (server starts immediately)
-async function rebuildIndex() {
-    const start = performance.now();
-
-    if (COUCHDB_URL && vault.catchUp) {
-        const changeCallback = (path: string, content: string | null, mtime?: number) => {
-            // content === "" is an empty-but-present note: index it, don't drop it.
-            applyIndexChange(searchIndex, path, content, mtime);
-        };
-
-        let since = searchIndex.since || "0";
-        if (debugLogging) console.log(`[debug] CouchDB catch-up from since: ${since}`);
-        let changes = 0;
-        const onBatch = async (batchSince: string, processed: number) => {
-            searchIndex.since = batchSince;
-            await searchIndex.saveToDisk();
-            console.log(`  checkpoint: ${processed} changes processed, ${searchIndex.size} notes indexed.`);
-        };
-        try {
-            const countingCallback = (path: string, content: string | null, mtime?: number) => {
-                changes++;
-                if (debugLogging) console.log(`[debug] Change: ${path} ${content !== null ? "(update)" : "(delete)"}`);
-                changeCallback(path, content, mtime);
-            };
-            const newSince = await vault.catchUp(since, countingCallback, onBatch);
-            searchIndex.since = newSince;
-        } catch (err) {
-            console.warn(`Catch-up failed (${err}), rebuilding index from scratch...`);
-            searchIndex.clear();
-            changes = 0;
-            const newSince = await vault.catchUp("0", (path, content, mtime) => {
-                changes++;
-                changeCallback(path, content, mtime);
-            }, onBatch);
-            searchIndex.since = newSince;
-        }
-        if (changes > 0) {
-            console.log(`Search index synced: ${changes} changes in ${((performance.now() - start) / 1000).toFixed(1)}s (${searchIndex.size} notes).`);
-        } else {
-            console.log(`Search index up to date (${searchIndex.size} notes).`);
-        }
-    } else if (VAULT_PATH) {
-        const notesWithMtime = await vault.listNotesWithMtime();
-        if (debugLogging) console.log(`[debug] Vault has ${notesWithMtime.length} notes`);
-        if (notesWithMtime.length > 0) {
-            const vaultPaths = new Set(notesWithMtime.map((n) => n.path));
-            for (const p of searchIndex.listPaths()) {
-                if (!vaultPaths.has(p)) searchIndex.remove(p);
-            }
-            console.log(`Building search index (${notesWithMtime.length} notes)...`);
-            for (let i = 0; i < notesWithMtime.length; i++) {
-                const { path, mtime } = notesWithMtime[i];
-                const content = await vault.readNote(path);
-                // Index empty notes too (content === ""); readNote returns null only if absent.
-                if (content !== null) searchIndex.update(path, content, mtime);
-                if (notesWithMtime.length > 100 && (i + 1) % 500 === 0) {
-                    console.log(`  indexed ${i + 1}/${notesWithMtime.length}...`);
-                }
-            }
-            console.log(`Search index built: ${searchIndex.size} notes in ${((performance.now() - start) / 1000).toFixed(1)}s`);
-        }
-    }
-    await searchIndex.saveToDisk();
-}
-// Fire and forget — server starts while index builds
-rebuildIndex().catch((err) => console.error("Index rebuild failed:", err));
-
-// --- Watch for external changes ---
-let fsWatcher: ReturnType<typeof watchMarkdownFiles> | null = null;
-if (VAULT_PATH) {
-    // Local mode: watch filesystem for changes from Obsidian
-    const pending = new Map<string, ReturnType<typeof setTimeout>>();
-    fsWatcher = watchMarkdownFiles(VAULT_PATH, (notePath) => {
-        // Debounce: coalesce rapid events for the same file (Obsidian fires 2-3 per save)
-        if (pending.has(notePath)) clearTimeout(pending.get(notePath)!);
-        pending.set(notePath, setTimeout(() => handleFileChange(notePath), 100));
-    });
-
-    async function handleFileChange(notePath: string) {
-        pending.delete(notePath);
-        try {
-            const content = await vault.readNote(notePath);
-            if (content !== null) {
-                const s = await stat(join(VAULT_PATH!, notePath));
-                searchIndex.update(notePath, content, s.mtimeMs);
-            } else {
-                searchIndex.remove(notePath);
-            }
-        } catch {
-            // File deleted or path blocked by safePath
-            searchIndex.remove(notePath);
-        }
-    }
-    console.log("Watching vault for external changes.");
-} else if (COUCHDB_URL && vault.watchChanges) {
-    // Remote mode: watch CouchDB _changes feed for LiveSync updates
-    vault.watchChanges((path: string, content: string | null, mtime?: number, seq?: string | number) => {
-        if (debugLogging) console.log(`[debug] CouchDB ${content === null ? "delete" : "change"}: ${path}`);
-        // content === "" is an empty-but-present note: index it, don't drop it.
-        applyIndexChange(searchIndex, path, content, mtime);
-        if (seq) searchIndex.since = String(seq);
-    });
-    console.log("Watching CouchDB for LiveSync changes.");
-}
-
-// --- MCP Server ---
-const BASE_INSTRUCTIONS = "Access an Obsidian vault. You can read, list, search, create, and edit markdown notes. Deleting, moving, or renaming notes is not available. Every tool response includes an Obsidian deep link. Always show this link to the user using the format [obsidian://open?vault=...&file=...](obsidian://open?vault=...&file=...) so it is both clickable and visible as a URL.";
+const baseInstructions = "Access multiple Obsidian vaults. Call list_vaults first, then pass vault_id to every note tool. You can read, list, search, create, and edit markdown notes. Deleting, moving, or renaming notes is not available. Always show returned Obsidian deep links to the user.";
+const extraInstructions = loadExtraInstructions();
 const serverOptions: ConstructorParameters<typeof FastMCP>[0] = {
-    name: "obsidian-sync-mcp",
+    name: "couchloom",
     version: process.env.npm_package_version ?? "0.0.0",
-    instructions: MCP_EXTRA_INSTRUCTIONS ? `${BASE_INSTRUCTIONS}\n\n${MCP_EXTRA_INSTRUCTIONS}` : BASE_INSTRUCTIONS,
+    instructions: extraInstructions ? `${baseInstructions}\n\n${extraInstructions}` : baseInstructions,
 };
 
-// Auth
-import type { AuthHandle } from "./auth.js";
 let auth: AuthHandle | null = null;
-
-if (AUTH_TOKEN) {
-    serverOptions.authenticate = async (req: import("http").IncomingMessage) => {
-        const header = req.headers["authorization"];
-        // Accept static Bearer token (for curl, MCP Inspector, custom agents)
-        const expected = `Bearer ${AUTH_TOKEN}`;
-        if (header && header.length === expected.length && timingSafeEqual(Buffer.from(header), Buffer.from(expected))) {
-            return { authenticated: true };
-        }
-        // Accept OAuth-issued tokens (for Claude Web/Desktop/Mobile)
-        if (auth?.validateToken(header)) {
-            return { authenticated: true };
-        }
-        // RFC 9728: point strict clients (e.g. Gemini) at the resource
-        // metadata; Claude probes /.well-known directly but others rely on this.
+if (authToken) {
+    serverOptions.authenticate = async (request: import("http").IncomingMessage) => {
+        const header = request.headers.authorization;
+        const expected = `Bearer ${authToken}`;
+        if (header && header.length === expected.length && timingSafeEqual(Buffer.from(header), Buffer.from(expected))) return { authenticated: true };
+        if (auth?.validateToken(header)) return { authenticated: true };
         throw new Response("Unauthorized", {
             status: 401,
-            headers: { "WWW-Authenticate": `Bearer resource_metadata="${BASE_URL}/.well-known/oauth-protected-resource"` },
+            headers: { "WWW-Authenticate": `Bearer resource_metadata="${baseUrl}/.well-known/oauth-protected-resource"` },
         });
     };
-    console.log("Auth enabled (password-gated OAuth).");
+    console.log("Auth enabled (password-gated OAuth). ");
 } else {
-    // No token: enforce a Host-header allowlist so the "local only" precondition
-    // actually holds. Without this, DNS rebinding lets any website the operator
-    // visits reach the tool surface (CWE-350) even on a loopback bind, because
-    // the browser still sends the attacker's hostname in Host. Defaults to
-    // localhost; MCP_ALLOWED_HOSTS extends it for legit LAN/private-network use.
     const allowedHosts = buildAllowedHosts(process.env.MCP_ALLOWED_HOSTS);
-    serverOptions.authenticate = async (req: import("http").IncomingMessage) => {
-        // Host check defeats DNS rebinding; Origin check defeats a direct
-        // cross-origin browser fetch to loopback (the transport sends wildcard CORS).
-        if (!isHostAllowed(req.headers["host"], allowedHosts)) {
-            throw new Response("Forbidden: Host not allowed", { status: 403 });
-        }
-        if (!isOriginAllowed(req.headers["origin"], allowedHosts)) {
-            throw new Response("Forbidden: cross-origin request rejected", { status: 403 });
-        }
+    serverOptions.authenticate = async (request: import("http").IncomingMessage) => {
+        if (!isHostAllowed(request.headers.host, allowedHosts)) throw new Response("Forbidden: Host not allowed", { status: 403 });
+        if (!isOriginAllowed(request.headers.origin, allowedHosts)) throw new Response("Forbidden: cross-origin request rejected", { status: 403 });
         return { authenticated: true };
     };
-    console.log(`Auth disabled — accepting only local Host/Origin headers: ${[...allowedHosts].join(", ")}. Set MCP_ALLOWED_HOSTS to add hosts, or MCP_AUTH_TOKEN for authenticated remote access.`);
-    const host = process.env.HOST ?? "0.0.0.0";
-    if (host === "0.0.0.0") {
-        console.warn("WARNING: No authentication and listening on all interfaces. Browser attacks (DNS rebinding and cross-origin fetch) are blocked by the Host/Origin checks, but any non-browser client that can reach this port has full vault access. Set MCP_AUTH_TOKEN, or HOST=127.0.0.1 to bind to loopback only.");
-    }
+    console.log(`Auth disabled — allowed Host/Origin values: ${[...allowedHosts].join(", ")}.`);
+    if ((process.env.HOST ?? "0.0.0.0") === "0.0.0.0") console.warn("WARNING: no authentication while listening on all interfaces; set MCP_AUTH_TOKEN for remote access.");
 }
 
 const server = new FastMCP(serverOptions);
-
-if (AUTH_TOKEN) {
-    const tokenPath = join(dataDir, "auth-tokens.json");
-    auth = mountPasswordAuth(server.getApp(), BASE_URL, AUTH_TOKEN, tokenPath);
+if (authToken) {
+    auth = mountPasswordAuth(server.getApp(), baseUrl, authToken, join(baseDataDir, "server", "auth-tokens.json"));
     await auth.loadTokens();
 }
+registerTools(server, registry, readOnly, writeFolders);
 
-// --- Tools ---
-registerTools(server, vault, searchIndex, VAULT_NAME, READ_ONLY, WRITE_FOLDERS);
-
-// --- Graceful shutdown ---
-async function shutdown() {
+let shuttingDown = false;
+async function shutdown(): Promise<void> {
+    if (shuttingDown) return;
+    shuttingDown = true;
     console.log("Shutting down...");
-    if (fsWatcher) fsWatcher.close();
-    await searchIndex.saveToDisk();
-    if (auth) await auth.saveTokens();
-    await vault.close();
-    process.exit(0);
+    const results = await Promise.allSettled([
+        ...runtimes.map((runtime) => runtime.close()),
+        ...(auth ? [auth.saveTokens()] : []),
+    ]);
+    const failed = results.filter(({ status }) => status === "rejected");
+    if (failed.length) console.error(`Shutdown completed with ${failed.length} error(s).`);
+    process.exit(failed.length ? 1 : 0);
 }
 process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
 
-// --- Periodic save (every 5 minutes) ---
 setInterval(async () => {
-    await searchIndex.saveToDisk();
+    await Promise.allSettled(runtimes.map((runtime) => runtime.save()));
     if (auth) {
         auth.cleanup();
         await auth.saveTokens();
     }
 }, 5 * 60 * 1000).unref();
 
-// --- Start server ---
 server.start({
     transportType: "httpStream",
-    httpStream: { port: PORT, endpoint: "/mcp", host: process.env.HOST ?? "0.0.0.0" },
+    httpStream: { port, endpoint: "/mcp", host: process.env.HOST ?? "0.0.0.0" },
 });
-console.log(`obsidian-sync-mcp v${process.env.npm_package_version ?? "unknown"} listening on port ${PORT}`);
+console.log(`CouchLoom v${process.env.npm_package_version ?? "unknown"} listening on port ${port}`);
 
-// Prevent unhandled rejections from crashing the server (e.g. decryption failures in watcher)
-process.on("unhandledRejection", (err) => {
-    console.error("Unhandled rejection:", err);
-});
+process.on("unhandledRejection", (error) => console.error("Unhandled rejection:", error));
