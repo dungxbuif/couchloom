@@ -26,6 +26,11 @@ Safety override for the CouchLoom MVP: agents can read, create, and edit notes,
 but the MCP catalog never exposes `delete_note` or `move_note`. See
 [`docs/SAFE_TOOL_SURFACE.md`](docs/SAFE_TOOL_SURFACE.md).
 
+Multi-vault foundation is configured with `VAULTS_CONFIG_FILE` (recommended on
+VM100) or `VAULTS_CONFIG`. Each entry has a stable `id`, display `name`, and a
+`local` or `couchdb` connection. Legacy single-vault environment variables
+remain accepted during migration. See [`docs/MULTI_VAULT.md`](docs/MULTI_VAULT.md).
+
 ## Upstream behavior reference
 
 # Obsidian Sync MCP
