@@ -1,11 +1,11 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, rm, writeFile, mkdir, unlink, readFile } from "fs/promises";
-import { watch } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { LocalVault } from "./vault-local.js";
 import { SearchIndex } from "./search.js";
+import { watchMarkdownFiles } from "./watch-local.js";
 
 let tmpDir: string;
 let vault: LocalVault;
@@ -250,9 +250,7 @@ describe("edit_note operations (string manipulation)", () => {
 });
 
 function createWatcher(dir: string, index: SearchIndex) {
-    return watch(dir, { recursive: true }, async (_event, filename) => {
-        if (!filename || !filename.endsWith(".md")) return;
-        const notePath = filename.replace(/\\/g, "/");
+    return watchMarkdownFiles(dir, async (notePath) => {
         try {
             const content = await readFile(join(dir, notePath), "utf-8");
             index.update(notePath, content);
@@ -267,6 +265,7 @@ describe("file watcher integration", () => {
         const watchDir = await mkdtemp(join(tmpdir(), "watch-test-"));
         const searchIndex = new SearchIndex();
         const watcher = createWatcher(watchDir, searchIndex);
+        await watcher.ready;
 
         try {
             await writeFile(join(watchDir, "external.md"), "external edit keyword banana");
@@ -289,6 +288,7 @@ describe("file watcher integration", () => {
         const watchDir = await mkdtemp(join(tmpdir(), "watch-test-"));
         const searchIndex = new SearchIndex();
         const watcher = createWatcher(watchDir, searchIndex);
+        await watcher.ready;
 
         try {
             await writeFile(join(watchDir, "image.png"), "not a note");
@@ -304,6 +304,7 @@ describe("file watcher integration", () => {
         const watchDir = await mkdtemp(join(tmpdir(), "watch-test-"));
         const searchIndex = new SearchIndex();
         const watcher = createWatcher(watchDir, searchIndex);
+        await watcher.ready;
 
         try {
             await mkdir(join(watchDir, "sub", "dir"), { recursive: true });

@@ -52,19 +52,15 @@ const livesyncAliases: Plugin = {
 };
 
 export default defineConfig({
-    entry: ["src/main.ts"],
+    entry: ["src/index.ts"],
     format: ["esm"],
-    target: "node22",
+    target: "es2022",
     platform: "node",
     outDir: "dist",
     clean: true,
     sourcemap: true,
     noExternal: [/livesync-commonlib/, /\.\/stubs/],
-    banner: {
-        js: `#!/usr/bin/env node
-// Node polyfills for livesync-commonlib browser globals
-if(!("navigator" in globalThis)){globalThis.navigator={language:"en"};}`,
-    },
+    dts: true,
     define: {
         "process.env.npm_package_version": JSON.stringify(pkg.version),
     },

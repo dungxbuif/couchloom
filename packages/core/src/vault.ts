@@ -102,7 +102,10 @@ export class Vault implements VaultBackend {
         let since: string | number = 0;
 
         while (ids.length < SAMPLE_TARGET) {
-            const result = await db.changes({
+            const result: {
+                results: Array<{ id: string }>;
+                last_seq: string | number;
+            } = await db.changes({
                 since,
                 limit: BATCH_SIZE,
                 // Only real file entries — excludes chunks, versioninfo, milestones, sync params.

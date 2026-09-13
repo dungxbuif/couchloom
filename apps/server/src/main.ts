@@ -1,15 +1,21 @@
 import { FastMCP } from "fastmcp";
 import { join } from "path";
 import { timingSafeEqual, createHash } from "crypto";
-import { watch, readFileSync, statSync } from "fs";
+import { readFileSync, statSync } from "fs";
 import { stat } from "fs/promises";
 import { setGlobalLogFunction, LEVEL_INFO } from "octagonal-wheels/common/logger";
+import {
+    LocalVault,
+    SearchIndex,
+    Vault,
+    applyIndexChange,
+    parseWriteFolders,
+    registerTools,
+    watchMarkdownFiles,
+    type VaultBackend,
+} from "@couchloom/core";
 import { mountPasswordAuth } from "./auth.js";
-import { SearchIndex } from "./search.js";
-import { applyIndexChange } from "./index-sync.js";
 import { buildAllowedHosts, isHostAllowed, isOriginAllowed } from "./host-guard.js";
-import { registerTools } from "./tools.js";
-import { parseWriteFolders } from "./write-scope.js";
 
 // Suppress livesync-commonlib logs that expose vault file paths in production.
 // Set LOG_LEVEL=debug to see all library logs during development.
@@ -63,12 +69,9 @@ if (MCP_INSTRUCTIONS_FILE) {
 }
 
 // --- Initialize vault (local or remote) ---
-import type { VaultBackend } from "./vault-backend.js";
-
 let vault: VaultBackend;
 
 if (VAULT_PATH) {
-    const { LocalVault } = await import("./vault-local.js");
     vault = new LocalVault(VAULT_PATH);
     console.log(`Local mode: ${VAULT_PATH}`);
 } else if (COUCHDB_URL) {
@@ -76,7 +79,6 @@ if (VAULT_PATH) {
         console.error("COUCHDB_PASSWORD is required in remote mode.");
         process.exit(1);
     }
-    const { Vault } = await import("./vault.js");
     vault = new Vault({
         couchdbUrl: COUCHDB_URL,
         couchdbUser: COUCHDB_USER,
@@ -177,15 +179,11 @@ async function rebuildIndex() {
 rebuildIndex().catch((err) => console.error("Index rebuild failed:", err));
 
 // --- Watch for external changes ---
-let fsWatcher: ReturnType<typeof watch> | null = null;
+let fsWatcher: ReturnType<typeof watchMarkdownFiles> | null = null;
 if (VAULT_PATH) {
     // Local mode: watch filesystem for changes from Obsidian
     const pending = new Map<string, ReturnType<typeof setTimeout>>();
-    fsWatcher = watch(VAULT_PATH, { recursive: true }, (event, filename) => {
-        if (!filename || !filename.endsWith(".md")) return;
-        const notePath = filename.replace(/\\/g, "/");
-        if (notePath.startsWith(".obsidian/") || notePath.includes("/.obsidian/")) return;
-
+    fsWatcher = watchMarkdownFiles(VAULT_PATH, (notePath) => {
         // Debounce: coalesce rapid events for the same file (Obsidian fires 2-3 per save)
         if (pending.has(notePath)) clearTimeout(pending.get(notePath)!);
         pending.set(notePath, setTimeout(() => handleFileChange(notePath), 100));

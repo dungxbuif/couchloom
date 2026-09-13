@@ -1,6 +1,6 @@
 # CouchLoom Checklist
 
-- [ ] **1. Prepare code:** migrate upstream into Bun workspaces with
+- [x] **1. Prepare code:** migrate upstream into Bun workspaces with
   `@couchloom/core` and `@couchloom/server`; preserve current behavior.
 - [ ] **2. Safe tool surface:** support read/create/edit and remove MCP
   delete/move tools.
@@ -14,4 +14,3 @@
   connect the OpenClaw agent.
 - [ ] **7. VM100 rollout:** build a pinned image, deploy privately on VM100,
   verify indexing/write-back, and update homelab runbooks.
-

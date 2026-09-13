@@ -1,0 +1,11 @@
+export { makeDeepLink } from "./deeplink.js";
+export { classifyIds, type IdFormat } from "./id-format.js";
+export { applyIndexChange, deriveContent } from "./index-sync.js";
+export { parseFrontmatterAndLinks } from "./parse.js";
+export { SearchIndex } from "./search.js";
+export { registerTools } from "./tools.js";
+export type { NoteInfo, NoteListing, VaultBackend } from "./vault-backend.js";
+export { LocalVault } from "./vault-local.js";
+export { Vault, type VaultConfig } from "./vault.js";
+export { isPathWritable, parseWriteFolders } from "./write-scope.js";
+export { watchMarkdownFiles, type LocalVaultWatcher } from "./watch-local.js";

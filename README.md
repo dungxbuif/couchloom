@@ -1,3 +1,29 @@
+# CouchLoom
+
+CouchLoom is a Bun workspace being built from `obsidian-sync-mcp` for the
+VM100 multi-vault RAG service. The current migration preserves the upstream
+single-vault MCP behavior while separating reusable code from the executable:
+
+- `packages/core` — reusable LiveSync vault, metadata index, write policy, and
+  MCP tool registration library (`@couchloom/core`).
+- `apps/server` — executable MCP service (`@couchloom/server`).
+- `TASKS.md` — ordered MVP checklist; multi-vault and pgvector are the next
+  implementation objectives.
+
+Development commands:
+
+```bash
+bun install
+bun run test
+bun run build
+bun run dev
+```
+
+The remaining upstream usage guide below describes the behavior preserved by
+the migration. It will be revised as each CouchLoom MVP objective ships.
+
+## Upstream behavior reference
+
 # Obsidian Sync MCP
 
 <!-- mcp-name: io.github.es617/obsidian-sync-mcp -->
