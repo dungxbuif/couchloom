@@ -153,14 +153,14 @@ read_note(path='test-smoke/project.md')
 
 ---
 
-### 10. Move note
+### 10. Verify safe tool surface
 
 ```
-move_note(from='test-smoke/notes.md', to='test-smoke/archive/notes.md')
-list_folders()
+tools/list
 ```
 
-**Expected**: Note moved. `test-smoke/archive` folder appears.
+**Expected**: `write_note` and `edit_note` are present; `delete_note` and
+`move_note` are absent.
 
 ---
 
@@ -182,14 +182,8 @@ list_notes(modified_after='invalid-date')
 
 ### 12. Cleanup
 
-```
-delete_note(path='test-smoke/project.md')
-delete_note(path='test-smoke/daily.md')
-delete_note(path='test-smoke/archive/notes.md')
-list_notes(folder='test-smoke')
-```
-
-**Expected**: All three deleted. Final list returns no notes in `test-smoke` folder.
+Delete the temporary `test-smoke` folder manually in Obsidian. Agent-facing
+MCP intentionally provides no cleanup/delete operation.
 
 ---
 

@@ -28,6 +28,6 @@ plus an always-on app.
 
 - Agents may read, create, and edit notes.
 - Agents may not delete or move notes.
+- Do not add a configuration escape hatch for agent delete/move during MVP.
 - A human deletion in Obsidian may remove the corresponding derived RAG rows.
 - MCP remains private to the homelab network for the first deployment.
-

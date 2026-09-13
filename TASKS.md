@@ -2,7 +2,7 @@
 
 - [x] **1. Prepare code:** migrate upstream into Bun workspaces with
   `@couchloom/core` and `@couchloom/server`; preserve current behavior.
-- [ ] **2. Safe tool surface:** support read/create/edit and remove MCP
+- [x] **2. Safe tool surface:** support read/create/edit and remove MCP
   delete/move tools.
 - [ ] **3. Multi-vault:** load multiple CouchDB databases from validated config
   and require `vault_id` in note tools.

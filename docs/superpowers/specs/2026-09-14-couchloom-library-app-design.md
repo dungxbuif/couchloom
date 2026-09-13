@@ -87,8 +87,8 @@ Internal stubs and LiveSync compatibility helpers are not public exports.
   authentication, host/origin checks, and secret-safe logging.
 - Do not log note bodies or credentials.
 - Do not change current tool behavior during the structural migration.
-- The later safe-tool task will remove `delete_note` and `move_note` from the
-  app-facing catalog before VM100 deployment.
+- The app-facing catalog excludes `delete_note` and `move_note`; backend
+  methods remain internal for human-originated reconciliation and tests.
 
 ## Verification
 
@@ -107,4 +107,3 @@ During migration, update `README.md`, `docs/GUIDELINES.md`, and this design.
 Later behavior tasks must update human documentation and the machine-readable
 MCP/config schemas in the same commit. RelayHub documentation is unrelated and
 must not be changed.
-

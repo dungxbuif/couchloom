@@ -7,7 +7,7 @@ import { isPathWritable } from "./write-scope.js";
 
 const debugLogging = process.env.LOG_LEVEL === "debug";
 
-const WRITE_TOOLS = ["write_note", "edit_note", "delete_note", "move_note"] as const;
+const WRITE_TOOLS = ["write_note", "edit_note"] as const;
 
 export function registerTools(
     server: FastMCP,
@@ -253,45 +253,6 @@ export function registerTools(
             searchIndex.update(path, updated, Date.now());
             const deepLink = makeDeepLink(vaultName, path);
             return `Note edited (${op}): ${path}\n[Open in Obsidian](${deepLink})`;
-        },
-    });
-
-    if (!readOnly) server.addTool({
-        name: "delete_note",
-        description: "Delete a note from the Obsidian vault." + writeScopeNote,
-        parameters: z.object({
-            path: z.string().describe("Vault-relative path to the note to delete"),
-        }),
-        execute: async ({ path }) => {
-            if (!isPathWritable(path, writeFolders)) return denyWrite(path);
-            const ok = await vault.deleteNote(path);
-            if (ok) searchIndex.remove(path);
-            return ok ? `Deleted: ${path}` : `Failed to delete: ${path}`;
-        },
-    });
-
-    if (!readOnly) server.addTool({
-        name: "move_note",
-        description:
-            "Move or rename a note. Use this to rename a note within the same folder, move it to a different folder, or both at once. Creates destination folders automatically." + writeScopeNote,
-        parameters: z.object({
-            from: z.string().describe("Current path, e.g. 'daily/old-name.md'"),
-            to: z.string().describe("New path, e.g. 'projects/new-name.md'"),
-        }),
-        execute: async ({ from, to }) => {
-            // Moving out of a folder deletes there; moving in writes there — both ends must be writable.
-            if (!isPathWritable(from, writeFolders)) return denyWrite(from);
-            if (!isPathWritable(to, writeFolders)) return denyWrite(to);
-            const content = await vault.readNote(from);
-            const ok = await vault.moveNote(from, to);
-            if (!ok) {
-                return `Failed to move: ${from} → ${to}`;
-            }
-            searchIndex.remove(from);
-            // content === "" is an empty-but-present note: keep it indexed at the new path.
-            if (content !== null) searchIndex.update(to, content, Date.now());
-            const deepLink = makeDeepLink(vaultName, to);
-            return `Moved: ${from} → ${to}\n[Open in Obsidian](${deepLink})`;
         },
     });
 

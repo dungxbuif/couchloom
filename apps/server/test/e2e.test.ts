@@ -15,9 +15,7 @@ const PORT = 9877;
 const BASE = `http://localhost:${PORT}/mcp`;
 const AUTH = "ci-test-token";
 
-const NODE_BIN = existsSync("/opt/homebrew/opt/node@22/bin/node")
-    ? "/opt/homebrew/opt/node@22/bin/node"
-    : "node";
+const BUN_BIN = process.execPath;
 
 let server: ChildProcess;
 let vaultDir: string;
@@ -61,7 +59,7 @@ async function callTool(name: string, args: any = {}): Promise<string> {
 
 async function startServer(env: Record<string, string> = {}): Promise<void> {
     serverLogs = "";
-    server = spawn(NODE_BIN, ["dist/main.js"], {
+    server = spawn(BUN_BIN, ["apps/server/dist/main.js"], {
         env: { ...process.env, PORT: String(PORT), MCP_AUTH_TOKEN: AUTH, ...env },
         stdio: "pipe",
     });
@@ -227,20 +225,14 @@ describe("E2E: get_note_metadata", () => {
     });
 });
 
-describe("E2E: move_note", () => {
-    it("moves a note across folders", async () => {
-        const text = await callTool("move_note", { from: "ci-test.md", to: "archive/ci-test.md" });
-        assert.ok(text.includes("Moved"));
-        assert.ok(!existsSync(join(vaultDir, "ci-test.md")));
-        assert.ok(existsSync(join(vaultDir, "archive/ci-test.md")));
-    });
-});
-
-describe("E2E: delete_note", () => {
-    it("deletes a note", async () => {
-        const text = await callTool("delete_note", { path: "archive/ci-test.md" });
-        assert.ok(text.includes("Deleted"));
-        assert.ok(!existsSync(join(vaultDir, "archive/ci-test.md")));
+describe("E2E: safe tool surface", () => {
+    it("never exposes delete or move", async () => {
+        const list = await mcpCall("tools/list", {});
+        const tools: string[] = (list?.result?.tools ?? []).map((t: any) => t.name);
+        assert.ok(tools.includes("write_note"));
+        assert.ok(tools.includes("edit_note"));
+        assert.ok(!tools.includes("delete_note"));
+        assert.ok(!tools.includes("move_note"));
     });
 });
 
@@ -320,7 +312,7 @@ describe("E2E: MCP_INSTRUCTIONS", () => {
         await stopServer();
         await startServer({ VAULT_PATH: vaultDir, VAULT_NAME: "TestVault", MCP_INSTRUCTIONS: "inline-rule-XYZ" });
         const instr: string = lastInitResult?.result?.instructions ?? "";
-        assert.ok(instr.includes("Access and manage an Obsidian vault"), "base instructions still present");
+        assert.ok(instr.includes("Access an Obsidian vault"), "base instructions still present");
         assert.ok(instr.includes("inline-rule-XYZ"), "inline env contents appended");
     });
 
@@ -335,7 +327,7 @@ describe("E2E: MCP_INSTRUCTIONS", () => {
             MCP_INSTRUCTIONS_FILE: instructionsFile,
         });
         const instr: string = lastInitResult?.result?.instructions ?? "";
-        assert.ok(instr.includes("Access and manage an Obsidian vault"), "base instructions still present");
+        assert.ok(instr.includes("Access an Obsidian vault"), "base instructions still present");
         assert.ok(instr.includes("file-rule-ABC"), "file contents appended");
         assert.ok(instr.includes("file-rule-DEF"), "file contents appended (multiline)");
         assert.ok(!instr.includes("inline-rule-XYZ"), "inline env ignored when file is set");

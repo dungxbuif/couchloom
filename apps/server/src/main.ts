@@ -217,7 +217,7 @@ if (VAULT_PATH) {
 }
 
 // --- MCP Server ---
-const BASE_INSTRUCTIONS = "Access and manage an Obsidian vault. You can read, write, list, search, move, and delete markdown notes. Every tool response includes an Obsidian deep link. Always show this link to the user using the format [obsidian://open?vault=...&file=...](obsidian://open?vault=...&file=...) so it is both clickable and visible as a URL.";
+const BASE_INSTRUCTIONS = "Access an Obsidian vault. You can read, list, search, create, and edit markdown notes. Deleting, moving, or renaming notes is not available. Every tool response includes an Obsidian deep link. Always show this link to the user using the format [obsidian://open?vault=...&file=...](obsidian://open?vault=...&file=...) so it is both clickable and visible as a URL.";
 const serverOptions: ConstructorParameters<typeof FastMCP>[0] = {
     name: "obsidian-sync-mcp",
     version: process.env.npm_package_version ?? "0.0.0",
