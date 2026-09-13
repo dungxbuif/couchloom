@@ -18,10 +18,18 @@ export class VaultRuntime {
     readonly context: VaultContext;
     #watcher: LocalVaultWatcher | null = null;
     #debug: boolean;
+    #onDocumentChange?: (path: string, content: string | null, mtime?: number) => Promise<void>;
+    #ragQueue: Promise<void> = Promise.resolve();
 
-    constructor(config: AppVaultConfig, baseDataDir: string, debug = false) {
+    constructor(
+        config: AppVaultConfig,
+        baseDataDir: string,
+        debug = false,
+        onDocumentChange?: (path: string, content: string | null, mtime?: number) => Promise<void>,
+    ) {
         this.config = config;
         this.#debug = debug;
+        this.#onDocumentChange = onDocumentChange;
         this.backend = config.mode === "local"
             ? new LocalVault(config.path)
             : new Vault({
@@ -40,6 +48,7 @@ export class VaultRuntime {
         await this.backend.init();
         await this.searchIndex.loadFromDisk();
         await this.#rebuildIndex();
+        await this.#ragQueue;
         console.log(`[vault:${this.config.id}] Search index built: ${this.searchIndex.size} notes.`);
         this.#startWatcher();
         console.log(`[vault:${this.config.id}] ready (${this.config.mode}).`);
@@ -52,12 +61,16 @@ export class VaultRuntime {
     async close(): Promise<void> {
         if (this.#watcher) await this.#watcher.close();
         await this.save();
+        await this.#ragQueue;
         await this.backend.close();
     }
 
     async #rebuildIndex(): Promise<void> {
         if (this.config.mode === "couchdb" && this.backend.catchUp) {
-            const apply = (path: string, content: string | null, mtime?: number) => applyIndexChange(this.searchIndex, path, content, mtime);
+            const apply = (path: string, content: string | null, mtime?: number) => {
+                applyIndexChange(this.searchIndex, path, content, mtime);
+                this.#enqueueRag(path, content, mtime);
+            };
             const onBatch = async (since: string) => {
                 this.searchIndex.since = since;
                 await this.save();
@@ -75,10 +88,16 @@ export class VaultRuntime {
 
         const notes = await this.backend.listNotesWithMtime();
         const present = new Set(notes.map(({ path }) => path));
-        for (const path of this.searchIndex.listPaths()) if (!present.has(path)) this.searchIndex.remove(path);
+        for (const path of this.searchIndex.listPaths()) {
+            if (!present.has(path)) {
+                this.searchIndex.remove(path);
+                this.#enqueueRag(path, null);
+            }
+        }
         for (const { path, mtime } of notes) {
             const content = await this.backend.readNote(path);
             if (content !== null) this.searchIndex.update(path, content, mtime);
+            if (content !== null) this.#enqueueRag(path, content, mtime);
         }
         await this.save();
     }
@@ -94,6 +113,7 @@ export class VaultRuntime {
                     const content = await this.backend.readNote(path);
                     if (content === null) this.searchIndex.remove(path);
                     else this.searchIndex.update(path, content, Date.now());
+                    this.#enqueueRag(path, content, Date.now());
                 }, 100));
             });
             return;
@@ -102,7 +122,15 @@ export class VaultRuntime {
         this.backend.watchChanges?.((path, content, mtime, seq) => {
             if (this.#debug) console.log(`[vault:${this.config.id}] ${content === null ? "delete" : "change"}: ${path}`);
             applyIndexChange(this.searchIndex, path, content, mtime);
+            this.#enqueueRag(path, content, mtime);
             if (seq !== undefined) this.searchIndex.since = String(seq);
         });
+    }
+
+    #enqueueRag(path: string, content: string | null, mtime?: number): void {
+        if (!this.#onDocumentChange) return;
+        this.#ragQueue = this.#ragQueue
+            .then(() => this.#onDocumentChange!(path, content, mtime))
+            .catch((error) => console.error(`[vault:${this.config.id}] RAG indexing failed for ${path}: ${(error as Error).message}`));
     }
 }

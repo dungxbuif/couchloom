@@ -6,9 +6,9 @@
   delete/move tools.
 - [x] **3. Multi-vault:** load multiple CouchDB databases from validated config
   and require `vault_id` in note tools.
-- [ ] **4. pgvector RAG:** chunk Markdown, create embeddings, persist vectors,
+- [x] **4. pgvector RAG:** chunk Markdown, create embeddings, persist vectors,
   and expose semantic search.
-- [ ] **5. Event indexing:** keep one durable `_changes` checkpoint per vault
+- [x] **5. Event indexing:** keep one durable `_changes` checkpoint per vault
   and reconcile human updates/deletions.
 - [ ] **6. MCP integration:** expose authenticated Streamable HTTP MCP and
   connect the OpenClaw agent.

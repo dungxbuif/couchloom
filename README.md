@@ -1,14 +1,14 @@
 # CouchLoom
 
 CouchLoom is a Bun workspace being built from `obsidian-sync-mcp` for the
-VM100 multi-vault RAG service. The current migration preserves the upstream
-single-vault MCP behavior while separating reusable code from the executable:
+VM100 multi-vault RAG service. It separates reusable code from the executable:
 
 - `packages/core` — reusable LiveSync vault, metadata index, write policy, and
   MCP tool registration library (`@couchloom/core`).
+- `packages/rag` — deterministic chunking, embeddings, and pgvector storage
+  library (`@couchloom/rag`).
 - `apps/server` — executable MCP service (`@couchloom/server`).
-- `TASKS.md` — ordered MVP checklist; multi-vault and pgvector are the next
-  implementation objectives.
+- `TASKS.md` — ordered MVP and deployment checklist.
 
 Development commands:
 
@@ -245,6 +245,8 @@ Set `BASE_URL` to the tunnel URL when using authentication.
 | `list_folders` | List all folders in the vault with note counts — use to discover folder names |
 | `list_tags` | List all tags in the vault with counts — use to discover tags before filtering |
 | `list_notes` | List notes with timestamps. Filter by folder, name, tag, or date. Sort by name or modified. |
+| `search_notes` | Semantic pgvector search scoped by `vault_id` |
+| `get_index_status` | Show metadata checkpoint and RAG status for a vault |
 | `get_note_metadata` | Get frontmatter, tags, outgoing links, backlinks, size, and timestamps — navigate the knowledge graph |
 
 Every tool response includes an [Obsidian deep link](https://help.obsidian.md/Extending+Obsidian/Obsidian+URI) (`obsidian://open?vault=...&file=...`) that works on Mac and iOS.
@@ -279,6 +281,15 @@ Without `MCP_AUTH_TOKEN`, the server runs without authentication — suitable fo
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
+| `VAULTS_CONFIG_FILE` | Recommended | — | JSON file containing the validated multi-vault array |
+| `VAULTS_CONFIG` | Alternative | — | Inline multi-vault JSON array; cannot be combined with `VAULTS_CONFIG_FILE` |
+| `DATABASE_URL` | For RAG | — | PostgreSQL connection string; enables pgvector RAG |
+| `EMBEDDING_BASE_URL` | For RAG | — | OpenAI-compatible API root ending in `/v1` |
+| `EMBEDDING_API_KEY` | Optional | — | Embedding API bearer token; may be empty for a trusted local endpoint |
+| `EMBEDDING_MODEL` | For RAG | — | Embedding model identifier |
+| `EMBEDDING_DIMENSIONS` | For RAG | — | Positive integer matching the model output and vector column |
+| `RAG_CHUNK_CHARS` | Optional | `1800` | Target maximum Markdown chunk size |
+| `RAG_CHUNK_OVERLAP` | Optional | `200` | Character overlap between adjacent chunks |
 | `VAULT_PATH` | Filesystem mode | — | Path to your Obsidian vault directory |
 | `COUCHDB_URL` | CouchDB mode | — | CouchDB server URL |
 | `COUCHDB_USER` | CouchDB mode | `admin` | CouchDB username |
@@ -292,7 +303,7 @@ Without `MCP_AUTH_TOKEN`, the server runs without authentication — suitable fo
 | `PORT` | Optional | `8787` | HTTP port |
 | `HOST` | Optional | `0.0.0.0` | Bind address (`127.0.0.1` to restrict to localhost) |
 | `MCP_ALLOWED_HOSTS` | Optional | — | Comma-separated extra `Host` values accepted in no-auth mode (e.g. `192.168.1.5,mybox.local`). No-auth mode rejects any other Host to block browser DNS-rebinding; localhost is always allowed. Ignored when `MCP_AUTH_TOKEN` is set. |
-| `DATA_DIR` | Optional | `~/.obsidian-mcp` | Directory for persisted data (metadata index, auth tokens) |
+| `DATA_DIR` | Optional | `~/.couchloom` | Directory for per-vault metadata checkpoints and auth tokens |
 | `LOG_LEVEL` | Optional | — | Set to `debug` for verbose logging (library logs, change feed, index sync) |
 | `MCP_REFRESH_DAYS` | Optional | `14` | Days before auth session expires |
 | `READ_ONLY` | Optional | `false` | Set to `true` to disable `write_note` and `edit_note`. Only read tools remain exposed. |

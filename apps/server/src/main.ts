@@ -7,6 +7,7 @@ import { parseWriteFolders, registerTools, VaultRegistry } from "@couchloom/core
 import { mountPasswordAuth, type AuthHandle } from "./auth.js";
 import { buildAllowedHosts, isHostAllowed, isOriginAllowed } from "./host-guard.js";
 import { loadVaultConfigs } from "./vault-config.js";
+import { RagRuntime } from "./rag-runtime.js";
 import { VaultRuntime } from "./vault-runtime.js";
 
 const debugLogging = process.env.LOG_LEVEL === "debug";
@@ -42,14 +43,22 @@ function loadExtraInstructions(): string | undefined {
 }
 
 let configs;
+let rag: RagRuntime | null = null;
 try {
     configs = loadVaultConfigs();
+    rag = RagRuntime.fromEnvironment();
+    await rag?.start();
 } catch (error) {
-    console.error(`Invalid vault configuration: ${(error as Error).message}`);
+    console.error(`Invalid service configuration: ${(error as Error).message}`);
     process.exit(1);
 }
 
-const runtimes = configs.map((config) => new VaultRuntime(config, baseDataDir, debugLogging));
+const runtimes = configs.map((config) => new VaultRuntime(
+    config,
+    baseDataDir,
+    debugLogging,
+    rag ? (path, content, mtime) => rag!.apply(config.id, path, content, mtime).then(() => undefined) : undefined,
+));
 try {
     await Promise.all(runtimes.map((runtime) => runtime.start()));
 } catch (error) {
@@ -57,7 +66,12 @@ try {
     console.error(`Vault startup failed: ${(error as Error).message}`);
     process.exit(1);
 }
-const registry = new VaultRegistry(runtimes.map(({ context }) => context));
+const registry = new VaultRegistry(runtimes.map(({ context }) => ({
+    ...context,
+    onDocumentChange: rag ? (path: string, content: string | null, mtime?: number) => rag!.apply(context.id, path, content, mtime).then(() => undefined) : undefined,
+    semanticSearch: rag ? async (query: string, limit?: number) => (await rag!.search(query, [context.id], limit)).map(({ path, chunkIndex, content, score }) => ({ path, chunkIndex, content, score })) : undefined,
+    ragStatus: () => ({ enabled: !!rag, ...(rag ? { model: rag.model } : {}) }),
+})));
 console.log(`CouchLoom loaded ${registry.list().length} vault(s): ${registry.list().map(({ id }) => id).join(", ")}`);
 
 const baseInstructions = "Access multiple Obsidian vaults. Call list_vaults first, then pass vault_id to every note tool. You can read, list, search, create, and edit markdown notes. Deleting, moving, or renaming notes is not available. Always show returned Obsidian deep links to the user.";
@@ -93,6 +107,8 @@ if (authToken) {
 }
 
 const server = new FastMCP(serverOptions);
+server.getApp().get("/health", (context) => context.json({ status: "ok" }));
+server.getApp().get("/ready", (context) => context.json({ status: "ready", vaults: registry.list().length, rag: !!rag }));
 if (authToken) {
     auth = mountPasswordAuth(server.getApp(), baseUrl, authToken, join(baseDataDir, "server", "auth-tokens.json"));
     await auth.loadTokens();
@@ -106,6 +122,7 @@ async function shutdown(): Promise<void> {
     console.log("Shutting down...");
     const results = await Promise.allSettled([
         ...runtimes.map((runtime) => runtime.close()),
+        ...(rag ? [rag.close()] : []),
         ...(auth ? [auth.saveTokens()] : []),
     ]);
     const failed = results.filter(({ status }) => status === "rejected");

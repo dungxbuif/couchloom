@@ -78,6 +78,7 @@ export function registerTools(
                 return `Failed to write note: ${path}`;
             }
             searchIndex.update(path, content, Date.now());
+            await registry.get(vault_id).onDocumentChange?.(path, content, Date.now());
             const deepLink = makeDeepLink(name, path);
             return `Note saved: ${path}\n[Open in Obsidian](${deepLink})`;
         },
@@ -150,6 +151,26 @@ export function registerTools(
                 lines.push(`\n... and ${total - cap} more. Use a folder filter or limit to narrow results.`);
             }
             return lines.join("\n");
+        },
+    });
+
+    server.addTool({
+        name: "search_notes",
+        description: "Semantically search indexed Markdown chunks within one vault.",
+        parameters: z.object({
+            vault_id: z.string().describe("Vault id from list_vaults"),
+            query: z.string().min(1).describe("Natural-language search query"),
+            limit: z.coerce.number().int().min(1).max(50).optional().describe("Maximum results, default 8"),
+        }),
+        execute: async ({ vault_id, query, limit }) => {
+            const context = registry.get(vault_id);
+            if (!context.semanticSearch) return `Semantic search is disabled for vault: ${vault_id}`;
+            const results = await context.semanticSearch(query, limit ?? 8);
+            if (!results.length) return `No semantic matches found in vault: ${vault_id}`;
+            return results.map((result) => {
+                const link = makeDeepLink(context.name, result.path);
+                return `- score=${result.score.toFixed(4)} chunk=${result.chunkIndex} [${result.path}](${link})\n  ${result.content}`;
+            }).join("\n");
         },
     });
 
@@ -264,8 +285,20 @@ export function registerTools(
                 return `Failed to edit note: ${path}`;
             }
             searchIndex.update(path, updated, Date.now());
+            await registry.get(vault_id).onDocumentChange?.(path, updated, Date.now());
             const deepLink = makeDeepLink(name, path);
             return `Note edited (${op}): ${path}\n[Open in Obsidian](${deepLink})`;
+        },
+    });
+
+    server.addTool({
+        name: "get_index_status",
+        description: "Show metadata and semantic-index status for one vault.",
+        parameters: z.object({ vault_id: z.string().describe("Vault id from list_vaults") }),
+        execute: async ({ vault_id }) => {
+            const context = registry.get(vault_id);
+            const rag = context.ragStatus?.() ?? { enabled: false };
+            return JSON.stringify({ vault_id, notes: context.searchIndex.size, checkpoint: context.searchIndex.since || null, rag });
         },
     });
 

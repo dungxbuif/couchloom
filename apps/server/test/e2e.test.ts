@@ -115,6 +115,14 @@ after(async () => {
 // --- Tool Tests ---
 
 describe("E2E: Auth", () => {
+    it("serves health and readiness probes", async () => {
+        const health = await fetch(`http://localhost:${PORT}/health`);
+        const ready = await fetch(`http://localhost:${PORT}/ready`);
+        assert.equal(health.status, 200);
+        assert.equal(ready.status, 200);
+        assert.equal((await ready.json() as any).vaults, 1);
+    });
+
     it("rejects unauthenticated requests", async () => {
         const resp = await fetch(BASE, {
             method: "POST",

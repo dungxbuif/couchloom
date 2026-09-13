@@ -6,6 +6,16 @@ export interface VaultContext {
     name: string;
     backend: VaultBackend;
     searchIndex: SearchIndex;
+    onDocumentChange?: (path: string, content: string | null, mtime?: number) => Promise<void>;
+    semanticSearch?: (query: string, limit?: number) => Promise<SemanticSearchResult[]>;
+    ragStatus?: () => { enabled: boolean; model?: string };
+}
+
+export interface SemanticSearchResult {
+    path: string;
+    chunkIndex: number;
+    content: string;
+    score: number;
 }
 
 export type VaultSummary = Pick<VaultContext, "id" | "name">;

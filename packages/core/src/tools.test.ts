@@ -29,6 +29,8 @@ describe("safe MCP tool catalog", () => {
         expect(names).toContain("read_note");
         expect(names).toContain("write_note");
         expect(names).toContain("edit_note");
+        expect(names).toContain("search_notes");
+        expect(names).toContain("get_index_status");
         expect(names).not.toContain("delete_note");
         expect(names).not.toContain("move_note");
     });
@@ -51,5 +53,10 @@ describe("safe MCP tool catalog", () => {
         const listVaults = registeredTools().find(({ name }) => name === "list_vaults")!;
         expect(await listVaults.execute({})).toContain("personal");
         expect(await listVaults.execute({})).toContain("work");
+    });
+
+    test("semantic search reports disabled without a RAG capability", async () => {
+        const search = registeredTools().find(({ name }) => name === "search_notes")!;
+        expect(await search.execute({ vault_id: "personal", query: "hello" })).toContain("disabled");
     });
 });

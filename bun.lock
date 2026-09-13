@@ -18,6 +18,7 @@
       },
       "dependencies": {
         "@couchloom/core": "workspace:*",
+        "@couchloom/rag": "workspace:*",
         "fastmcp": "^3.34.0",
         "octagonal-wheels": "^0.1.39",
       },
@@ -45,11 +46,20 @@
         "zod": "^3",
       },
     },
+    "packages/rag": {
+      "name": "@couchloom/rag",
+      "version": "0.1.0",
+      "dependencies": {
+        "postgres": "^3.4.7",
+      },
+    },
   },
   "packages": {
     "@borewit/text-codec": ["@borewit/text-codec@0.2.2", "", {}, "sha512-DDaRehssg1aNrH4+2hnj1B7vnUGEjU6OIlyRdkMd0aUdIUvKXrJfXsy8LVtXAy7DRvYVluWbMspsRhz2lcW0mQ=="],
 
     "@couchloom/core": ["@couchloom/core@workspace:packages/core"],
+
+    "@couchloom/rag": ["@couchloom/rag@workspace:packages/rag"],
 
     "@couchloom/server": ["@couchloom/server@workspace:apps/server"],
 
@@ -466,6 +476,8 @@
     "pkg-types": ["pkg-types@1.3.1", "", { "dependencies": { "confbox": "^0.1.8", "mlly": "^1.7.4", "pathe": "^2.0.1" } }, "sha512-/Jm5M4RvtBFVkKWRu2BLUTNP8/M2a+UwuAX+ae4770q1qVGtfjG+WTCupoZixokjmHiry8uI+dlY8KXYV5HVVQ=="],
 
     "postcss-load-config": ["postcss-load-config@6.0.1", "", { "dependencies": { "lilconfig": "^3.1.1" }, "peerDependencies": { "jiti": ">=1.21.0", "postcss": ">=8.0.9", "tsx": "^4.8.1", "yaml": "^2.4.2" }, "optionalPeers": ["jiti", "postcss", "yaml"] }, "sha512-oPtTM4oerL+UXmx+93ytZVN82RrlY/wPUV8IeDxFrzIjXOLF1pN+EmKPLbubvKHT2HC20xXsCAH2Z+CKV6Oz/g=="],
+
+    "postgres": ["postgres@3.4.9", "", {}, "sha512-GD3qdB0x1z9xgFI6cdRD6xu2Sp2WCOEoe3mtnyB5Ee0XrrL5Pe+e4CCnJrRMnL1zYtRDZmQQVbvOttLnKDLnaw=="],
 
     "pouchdb-abstract-mapreduce": ["pouchdb-abstract-mapreduce@9.0.0", "", { "dependencies": { "pouchdb-binary-utils": "9.0.0", "pouchdb-collate": "9.0.0", "pouchdb-errors": "9.0.0", "pouchdb-fetch": "9.0.0", "pouchdb-mapreduce-utils": "9.0.0", "pouchdb-md5": "9.0.0", "pouchdb-utils": "9.0.0" } }, "sha512-SnTtqwAEiAa3uxKbc1J7LfiBViwEkKe2xkK92zxyTXPqWBvMnh4UU3GXxx7GrXTM4L9llsQ3lSjpbH4CNqG1Mw=="],
 

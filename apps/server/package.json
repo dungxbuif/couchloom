@@ -12,6 +12,7 @@
     },
     "dependencies": {
         "@couchloom/core": "workspace:*",
+        "@couchloom/rag": "workspace:*",
         "fastmcp": "^3.34.0",
         "octagonal-wheels": "^0.1.39"
     }
