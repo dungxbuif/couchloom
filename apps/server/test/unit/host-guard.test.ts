@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { parseHostname, buildAllowedHosts, isHostAllowed, isOriginAllowed } from "./host-guard.js";
+import { parseHostname, buildAllowedHosts, isHostAllowed, isOriginAllowed } from "../../src/host-guard.js";
 
 describe("parseHostname", () => {
     it("strips the port", () => {

@@ -8,7 +8,7 @@
         "build": "tsup",
         "dev": "bun src/main.ts",
         "start": "bun dist/main.js",
-        "test": "bun test src/*.test.ts"
+        "test": "bun test test/unit"
     },
     "dependencies": {
         "@couchloom/core": "workspace:*",

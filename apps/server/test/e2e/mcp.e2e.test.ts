@@ -1,5 +1,5 @@
 /**
- * E2E test: starts server in local mode, tests all tools via MCP protocol.
+ * Process E2E test: starts server in local mode and exercises MCP tools.
  * Includes restart test to verify index persistence and mtime diff sync.
  */
 import { describe, it, before, after } from "node:test";

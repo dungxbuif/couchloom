@@ -3,7 +3,7 @@
  * #10) against a real, throwaway CouchDB. Destructive: drops and recreates
  * its two test databases — never point it at a real vault.
  *
- * Run: npm run test:couchdb  (starts against localhost:5985 by default)
+ * Run: bun run test:couchdb  (starts against localhost:5985 by default)
  *
  *   docker run -d --name couchdb-obf-test -p 5985:5984 \
  *     -e COUCHDB_USER=admin -e COUCHDB_PASSWORD=test couchdb:3
@@ -17,7 +17,7 @@
  * missing-passphrase fail-fast.
  */
 import assert from "node:assert/strict";
-import { Vault } from "../src/vault.js";
+import { Vault } from "@couchloom/core";
 
 const base = {
     couchdbUrl: process.env.TEST_COUCHDB_URL ?? "http://localhost:5985",

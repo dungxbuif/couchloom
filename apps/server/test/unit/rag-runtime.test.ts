@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { RagRuntime } from "./rag-runtime.js";
+import { RagRuntime } from "../../src/rag-runtime.js";
 
 test("RAG stays optional without DATABASE_URL", () => {
     expect(RagRuntime.fromEnvironment({})).toBeNull();

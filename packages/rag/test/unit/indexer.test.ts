@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { RagIndexer, type EmbeddingProvider, type VectorStore, type VectorDocument } from "./indexer.js";
+import { RagIndexer, type EmbeddingProvider, type VectorStore, type VectorDocument } from "../../src/indexer.js";
 
 class MemoryStore implements VectorStore {
     hashes = new Map<string, string>();

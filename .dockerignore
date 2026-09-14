@@ -4,5 +4,4 @@ node_modules/
 *.md
 docker-compose.yml
 .env
-test/
-src/stubs/
+**/test/

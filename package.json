@@ -24,9 +24,9 @@
         "dev": "bun run --cwd apps/server dev",
         "start": "bun run --cwd apps/server start",
         "test": "bun run --cwd packages/core test && bun run --cwd packages/rag test && bun run --cwd apps/server test",
-        "test:e2e": "bun test apps/server/test/e2e.test.ts",
-        "test:couchdb": "bun test apps/server/test/couchdb-obfuscation.e2e.ts",
-        "test:pgvector": "bun test packages/rag/test/pgvector.integration.test.ts"
+        "test:e2e": "bun test apps/server/test/e2e/mcp.e2e.test.ts apps/server/test/e2e/multi-vault.e2e.test.ts",
+        "test:couchdb": "bun test apps/server/test/e2e/couchdb-obfuscation.e2e.test.ts",
+        "test:pgvector": "bun test packages/rag/test/integration/pgvector.integration.test.ts"
     },
     "devDependencies": {
         "@types/node": "^22",

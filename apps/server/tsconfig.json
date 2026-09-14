@@ -6,7 +6,12 @@
         "esModuleInterop": true,
         "strict": true,
         "skipLibCheck": true,
-        "outDir": "dist"
+        "outDir": "dist",
+        "baseUrl": ".",
+        "paths": {
+            "@couchloom/core": ["../../packages/core/src/index.ts"],
+            "@couchloom/rag": ["../../packages/rag/src/index.ts"]
+        }
     },
     "include": ["src/**/*", "test/**/*"]
 }

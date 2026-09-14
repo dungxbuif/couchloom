@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseWriteFolders, isPathWritable } from "./write-scope.js";
+import { parseWriteFolders, isPathWritable } from "../../src/write-scope.js";
 
 test("parseWriteFolders: unset returns null (unrestricted)", () => {
     assert.equal(parseWriteFolders(undefined), null);

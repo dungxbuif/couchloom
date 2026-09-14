@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { classifyIds } from "./id-format.js";
+import { classifyIds } from "../../src/id-format.js";
 
 /**
  * Regression tests for the obfuscation mismatch behind issues #4 and #10:

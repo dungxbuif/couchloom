@@ -6,6 +6,6 @@
     "main": "./dist/index.js",
     "types": "./dist/index.d.ts",
     "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
-    "scripts": { "build": "tsup", "test": "bun test src/*.test.ts", "test:pgvector": "bun test test/pgvector.integration.test.ts" },
+    "scripts": { "build": "tsup", "test": "bun test test/unit", "test:pgvector": "bun test test/integration/pgvector.integration.test.ts" },
     "dependencies": { "postgres": "^3.4.7" }
 }

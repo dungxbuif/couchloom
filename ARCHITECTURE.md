@@ -28,7 +28,7 @@ The MCP server sits between CouchDB (or the local filesystem) and AI agents. It 
 - Startup: loads persisted index, catches up via CouchDB `_changes` feed from stored `since` sequence
 - Live watcher: `_changes` feed with `live: true` for real-time updates
 
-## Search Index (`src/search.ts`)
+## Metadata Index (`packages/core/src/search.ts`)
 
 A single `SearchIndex` class manages all indexed data in memory:
 
@@ -89,7 +89,7 @@ Filesystem: full scan of all .md files
 - Volume nuked: no persisted index, full rebuild; auth tokens lost (users re-authenticate)
 - Crash during save: concurrent save guard prevents corruption; next restart rebuilds
 
-## Vault Backend (`src/vault-backend.ts`)
+## Vault Backend (`packages/core/src/vault-backend.ts`)
 
 Interface shared by both modes:
 
@@ -109,19 +109,19 @@ interface VaultBackend {
 }
 ```
 
-### LocalVault (`src/vault-local.ts`)
+### LocalVault (`packages/core/src/vault-local.ts`)
 - `safePath()` resolves symlinks and blocks traversal
 - `listNotesWithMtime()` uses glob + stat in parallel
 - Filters `.obsidian/` directory
 
-### CouchDB Vault (`src/vault.ts`)
+### CouchDB Vault (`packages/core/src/vault.ts`)
 - `DirectFileManipulator` for all CouchDB operations
 - `validatePath()` blocks null bytes, `..`, absolute paths, length > 1000
 - `catchUp()` uses PouchDB `_changes` API directly (same selector as live watcher)
 - `watchChanges()` uses `beginWatch` for live `_changes` feed
 - Shared `docToChange()` and `mdFilter()` helpers for both catch-up and live watch
 
-## Authentication (`src/auth.ts`)
+## Authentication (`apps/server/src/auth.ts`)
 
 Self-contained OAuth 2.1 provider with PKCE:
 
@@ -136,9 +136,10 @@ Agent connects → /oauth/authorize → password page → /oauth/approve
 - Periodic cleanup of expired tokens and unused clients
 - Also accepts static `Bearer <MCP_AUTH_TOKEN>` for non-OAuth clients
 
-## Tools (`src/tools.ts`)
+## Tools (`packages/core/src/tools.ts`)
 
-10 tools registered via FastMCP:
+Ten tools are registered via FastMCP. Every note operation is scoped by
+`vault_id`:
 
 | Tool | Reads from | Writes to |
 |---|---|---|
@@ -148,17 +149,20 @@ Agent connects → /oauth/authorize → password page → /oauth/approve
 | `list_notes` | index (fallback: vault) | — |
 | `list_folders` | index (fallback: vault) | — |
 | `list_tags` | index | — |
-| `search_vault` | index + vault (for snippets) | — |
+| `search_notes` | pgvector index | — |
+| `get_index_status` | metadata + RAG runtime | — |
 | `get_note_metadata` | vault + index (backlinks) | — |
-| `move_note` | vault | vault + index |
-| `delete_note` | — | vault + index |
+| `list_vaults` | vault registry | — |
 
-## Build (`tsup.config.ts`)
+Delete and move methods remain available behind the internal backend interface
+for synchronization bookkeeping, but are never registered as MCP tools.
+
+## Build (`packages/core/tsup.config.ts`)
 
 livesync-commonlib is a Deno-style TypeScript library compiled for Node via tsup/esbuild:
 
-- `@lib/` alias → `lib/livesync-commonlib/src/`
-- `@/` alias → `src/stubs/` (Node stubs for browser-only code)
+- `@lib/` alias → `packages/core/lib/livesync-commonlib/src/`
+- `@/` alias → `packages/core/src/stubs/` (Node stubs for browser-only code)
 - Extension resolution: tries `.ts`, then `/index.ts`
 - Stubs: svelte, events, KeyValueDB, hub, logger (not used in headless mode)
 - `pouchdb-browser` → `pouchdb-http` (no IndexedDB in Node)
@@ -171,3 +175,16 @@ livesync-commonlib is a Deno-style TypeScript library compiled for Node via tsup
 - **FastMCP** — MCP server framework
 - **Hono** — HTTP framework (used by FastMCP, we add OAuth routes)
 - **PouchDB** — CouchDB client (transitive via livesync-commonlib)
+
+## Test layout
+
+- `packages/core/test/unit` — backend, parsing, metadata, tool, and safety tests.
+- `packages/rag/test/unit` — deterministic chunking and indexer tests.
+- `packages/rag/test/integration` — PostgreSQL/pgvector integration tests.
+- `apps/server/test/unit` — configuration, authentication, and runtime tests.
+- `apps/server/test/e2e` — process-level MCP and CouchDB tests.
+
+The server TypeScript config maps `@couchloom/core` and `@couchloom/rag` to
+their public source entry points for development and unit tests. Production
+builds still consume the package exports from `dist`; tests therefore do not
+depend on generated files left in the working tree.

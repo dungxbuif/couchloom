@@ -1,6 +1,6 @@
 import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { deriveContent, applyIndexChange, type IndexTarget } from "./index-sync.js";
+import { deriveContent, applyIndexChange, type IndexTarget } from "../../src/index-sync.js";
 
 /**
  * Regression tests for zero-byte notes being dropped from the search index

@@ -2,7 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { Hono } from "hono";
 import { createHash, randomBytes } from "crypto";
-import { mountPasswordAuth } from "./auth.js";
+import { mountPasswordAuth } from "../../src/auth.js";
 
 function setup(password = "test-password") {
     const app = new Hono();

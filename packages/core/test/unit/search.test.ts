@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
-import { SearchIndex } from "./search.js";
+import { SearchIndex } from "../../src/search.js";
 
 let tmpDir: string;
 

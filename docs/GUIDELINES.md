@@ -13,6 +13,18 @@ plus an always-on app.
 - Keep the LiveSync submodule pinned and record its commit when syncing
   upstream.
 
+## Repository layout
+
+- Production TypeScript lives only under `apps/*/src` and `packages/*/src`.
+- Unit tests live under `apps/*/test/unit` or `packages/*/test/unit`.
+- End-to-end and real-service tests live under `apps/*/test/e2e` and
+  `packages/*/test/integration`.
+- Generated `dist` and `node_modules` directories are never part of the source
+  tree or commits.
+- Keep only the VM100 deployment profile. Publishing metadata, upstream release
+  history, and obsolete deployment variants are intentionally excluded until
+  CouchLoom has its own release workflow.
+
 ## Working Rules
 
 - Use Bun `1.3.14` for install, tests, and builds.

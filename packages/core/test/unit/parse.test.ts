@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { parseFrontmatterAndLinks } from "./parse.js";
+import { parseFrontmatterAndLinks } from "../../src/parse.js";
 
 describe("parseFrontmatterAndLinks", () => {
     it("parses YAML frontmatter", () => {

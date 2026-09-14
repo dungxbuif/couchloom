@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import type { FastMCP } from "fastmcp";
-import { SearchIndex } from "./search.js";
-import { registerTools } from "./tools.js";
-import type { VaultBackend } from "./vault-backend.js";
-import { VaultRegistry } from "./vault-registry.js";
+import { SearchIndex } from "../../src/search.js";
+import { registerTools } from "../../src/tools.js";
+import type { VaultBackend } from "../../src/vault-backend.js";
+import { VaultRegistry } from "../../src/vault-registry.js";
 
 function registeredTools(readOnly = false): Array<{ name: string; parameters: { parse(value: unknown): unknown }; execute: (args: any) => Promise<unknown> }> {
     const tools: Array<any> = [];

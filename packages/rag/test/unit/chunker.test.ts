@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { chunkMarkdown } from "./chunker.js";
+import { chunkMarkdown } from "../../src/chunker.js";
 
 test("chunks deterministically with bounded overlap", () => {
     const content = "# One\n\n" + "a".repeat(80) + "\n\n# Two\n\n" + "b".repeat(80);

@@ -3,9 +3,9 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm, writeFile, mkdir, unlink, readFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
-import { LocalVault } from "./vault-local.js";
-import { SearchIndex } from "./search.js";
-import { watchMarkdownFiles } from "./watch-local.js";
+import { LocalVault } from "../../src/vault-local.js";
+import { SearchIndex } from "../../src/search.js";
+import { watchMarkdownFiles } from "../../src/watch-local.js";
 
 let tmpDir: string;
 let vault: LocalVault;

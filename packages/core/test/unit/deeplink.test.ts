@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { makeDeepLink } from "./deeplink.js";
+import { makeDeepLink } from "../../src/deeplink.js";
 
 describe("makeDeepLink", () => {
     it("strips .md extension from path", () => {

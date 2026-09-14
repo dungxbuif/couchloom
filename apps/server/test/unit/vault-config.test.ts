@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { loadVaultConfigs } from "./vault-config.js";
+import { loadVaultConfigs } from "../../src/vault-config.js";
 
 describe("multi-vault configuration", () => {
     test("loads multiple CouchDB databases from inline JSON", () => {

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { PgVectorStore } from "../src/pgvector-store.js";
+import { PgVectorStore } from "../../src/pgvector-store.js";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const run = databaseUrl ? test : test.skip;

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { SearchIndex } from "./search.js";
-import { VaultRegistry } from "./vault-registry.js";
-import type { VaultBackend } from "./vault-backend.js";
+import { SearchIndex } from "../../src/search.js";
+import { VaultRegistry } from "../../src/vault-registry.js";
+import type { VaultBackend } from "../../src/vault-backend.js";
 
 function backend(events: string[], id: string, closeError = false): VaultBackend {
     return {
