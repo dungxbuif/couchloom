@@ -8,3 +8,4 @@ Dockerfile.dev.fly
 .DS_Store
 .mcpregistry*
 .harness-tmp/
+.local-validation/

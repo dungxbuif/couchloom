@@ -23,10 +23,24 @@ export interface VaultConfig {
     obfuscatePaths?: boolean;
 }
 
+export function createLiveSyncTextBlob(content: string): Blob {
+    const blob = createTextBlob(content);
+    // Bun normalizes text/plain to text/plain;charset=utf-8, while the vendored
+    // LiveSync splitter recognizes only the exact MIME value.
+    if (blob.type !== "text/plain" && blob.type.startsWith("text/plain;")) {
+        Object.defineProperty(blob, "type", { value: "text/plain" });
+    }
+    return blob;
+}
+
 export class Vault implements VaultBackend {
     private manipulator: DirectFileManipulator;
     private passphrase: string | undefined;
     private config: VaultConfig;
+    private watchedPaths = new Map<string, string>();
+    private liveChanges: any;
+    private watchReconnectTimer?: ReturnType<typeof setTimeout>;
+    private closing = false;
 
     constructor(config: VaultConfig) {
         this.config = config;
@@ -123,6 +137,9 @@ export class Vault implements VaultBackend {
     }
 
     async close(): Promise<void> {
+        this.closing = true;
+        if (this.watchReconnectTimer) clearTimeout(this.watchReconnectTimer);
+        this.liveChanges?.cancel();
         this.manipulator.endWatch();
         await this.manipulator.close();
     }
@@ -194,12 +211,41 @@ export class Vault implements VaultBackend {
         return currentSince;
     }
 
-    watchChanges(callback: (path: string, content: string | null, mtime?: number, seq?: string | number) => void): void {
+    async watchChanges(callback: (path: string, content: string | null, mtime?: number, seq?: string | number) => void): Promise<void> {
+        // Hard CouchDB tombstones only retain _id/_rev/_deleted. Build this map
+        // before opening the feed so external hard deletes can still evict the
+        // corresponding metadata and vector rows.
+        for await (const doc of this.manipulator.enumerateAllNormalDocs({ metaOnly: true })) {
+            const meta = doc as MetaEntry;
+            if (meta._id && Vault.mdFilter(meta)) this.watchedPaths.set(meta._id, meta.path);
+        }
+
         // catchUp already set this.manipulator.since to the right point
-        this.manipulator.beginWatch(
-            (doc, seq) => Vault.docToChange(doc, callback, seq),
-            Vault.mdFilter,
-        );
+        const start = () => {
+            this.liveChanges = this.manipulator.liveSyncLocalDB.localDatabase
+                .changes({ include_docs: true, since: this.manipulator.since, live: true })
+                .on("change", async (change: any) => {
+                    const doc = change.doc;
+                    if (!doc) return;
+                    this.manipulator.since = String(change.seq);
+                    if (doc._deleted) {
+                        const path = this.watchedPaths.get(doc._id);
+                        if (!path) return;
+                        this.watchedPaths.delete(doc._id);
+                        callback(path, null, undefined, change.seq);
+                        return;
+                    }
+                    if (doc.type === "leaf" || doc.type === "versioninfo" || !Vault.mdFilter(doc)) return;
+                    if (doc._id) this.watchedPaths.set(doc._id, doc.path);
+                    const ready = await this.manipulator.getByMeta(doc).catch(() => null);
+                    if (ready) Vault.docToChange(ready, callback, change.seq);
+                })
+                .on("error", () => {
+                    if (this.closing) return;
+                    this.watchReconnectTimer = setTimeout(start, 10_000);
+                });
+        };
+        start();
     }
 
     private validatePath(path: string): void {
@@ -231,7 +277,7 @@ export class Vault implements VaultBackend {
             ctime = existing.ctime;
         }
 
-        const blob = createTextBlob(content);
+        const blob = createLiveSyncTextBlob(content);
         return await this.manipulator.put(path, blob, {
             ctime,
             mtime: Date.now(),

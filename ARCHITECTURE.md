@@ -26,7 +26,10 @@ The MCP server sits between CouchDB (or the local filesystem) and AI agents. It 
 - Handles E2E encryption (decrypt on read, encrypt on write) when `COUCHDB_PASSPHRASE` is set
 - Handles chunk reassembly (large notes are split into chunks by LiveSync)
 - Startup: loads persisted index, catches up via CouchDB `_changes` feed from stored `since` sequence
-- Live watcher: `_changes` feed with `live: true` for real-time updates
+- Live watcher: `_changes` feed with `live: true` for real-time updates. It
+  hydrates an `_id` → path map before subscribing so pathless CouchDB hard
+  tombstones can evict metadata and vector rows, and advances `since` for every
+  event so reconnects resume from the latest observed sequence.
 
 ## Metadata Index (`packages/core/src/search.ts`)
 
@@ -104,7 +107,7 @@ interface VaultBackend {
     getMetadata(path: string): Promise<NoteInfo | null>;
     listNotes(folder?: string): Promise<string[]>;
     listNotesWithMtime(folder?: string): Promise<NoteListing[]>;
-    watchChanges?(callback): void;          // live changes
+    watchChanges?(callback): void | Promise<void>; // live changes
     catchUp?(since, callback): Promise<string>; // CouchDB only
 }
 ```

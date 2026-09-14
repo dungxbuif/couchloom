@@ -50,7 +50,7 @@ export class VaultRuntime {
         await this.#rebuildIndex();
         await this.#ragQueue;
         console.log(`[vault:${this.config.id}] Search index built: ${this.searchIndex.size} notes.`);
-        this.#startWatcher();
+        await this.#startWatcher();
         console.log(`[vault:${this.config.id}] ready (${this.config.mode}).`);
     }
 
@@ -102,7 +102,7 @@ export class VaultRuntime {
         await this.save();
     }
 
-    #startWatcher(): void {
+    async #startWatcher(): Promise<void> {
         if (this.config.mode === "local") {
             const pending = new Map<string, ReturnType<typeof setTimeout>>();
             this.#watcher = watchMarkdownFiles(this.config.path, (path) => {
@@ -119,7 +119,7 @@ export class VaultRuntime {
             return;
         }
 
-        this.backend.watchChanges?.((path, content, mtime, seq) => {
+        await this.backend.watchChanges?.((path, content, mtime, seq) => {
             if (this.#debug) console.log(`[vault:${this.config.id}] ${content === null ? "delete" : "change"}: ${path}`);
             applyIndexChange(this.searchIndex, path, content, mtime);
             this.#enqueueRag(path, content, mtime);
