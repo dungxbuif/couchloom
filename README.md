@@ -1,389 +1,122 @@
 # CouchLoom
 
-CouchLoom is a Bun workspace being built from `obsidian-sync-mcp` for the
-VM100 multi-vault RAG service. It separates reusable code from the executable:
+CouchLoom is a Bun-based, multi-vault knowledge service for Obsidian
+Self-hosted LiveSync. It reconstructs Markdown from CouchDB, maintains an
+event-driven pgvector index, and exposes safe Streamable HTTP MCP tools to AI
+agents such as OpenClaw.
 
-- `packages/core` — reusable LiveSync vault, metadata index, write policy, and
-  MCP tool registration library (`@couchloom/core`).
-- `packages/rag` — deterministic chunking, embeddings, and pgvector storage
-  library (`@couchloom/rag`).
-- `apps/server` — executable MCP service (`@couchloom/server`).
-- `TASKS.md` — ordered MVP and deployment checklist.
+The MCP write surface intentionally supports create and edit, but never delete
+or move.
 
-Development commands:
+## Repository layout
+
+- `packages/core` — reusable LiveSync backends, metadata index, vault registry,
+  and MCP note tools.
+- `packages/rag` — deterministic Markdown chunking, OpenAI-compatible
+  embeddings, and vault-scoped pgvector storage.
+- `apps/server` — configuration, lifecycle, authentication, HTTP health, and
+  Streamable HTTP MCP runtime.
+- `deploy/vm100` — private VM100 Compose deployment with pgvector and Ollama.
+- `docs` — architecture, configuration, security, OpenClaw, and operations.
+
+## Capabilities
+
+- Multiple vaults, with one stable `vault_id` per CouchDB database.
+- Durable CouchDB `_changes` checkpoints and automatic re-indexing.
+- LiveSync chunk reconstruction, including supported E2E-encrypted vaults.
+- Semantic search filtered by one or more vault IDs.
+- Authenticated Streamable HTTP MCP at `/mcp`.
+- Liveness at `/health` and dependency readiness at `/ready`.
+
+## MCP tools
+
+| Tool | Purpose |
+| --- | --- |
+| `list_vaults` | Discover configured vault IDs and names |
+| `list_folders` | List vault folders and note counts |
+| `list_tags` | List tags and counts |
+| `list_notes` | Filter and sort notes |
+| `read_note` | Read Markdown by path |
+| `get_note_metadata` | Read frontmatter, tags, links, and backlinks |
+| `search_notes` | Search the pgvector index by semantic similarity |
+| `get_index_status` | Inspect per-vault metadata/RAG state |
+| `write_note` | Create or replace a Markdown note |
+| `edit_note` | Append, prepend, or replace exact text |
+
+Every note tool requires `vault_id`. `delete_note` and `move_note` are not
+registered.
+
+## Local development
+
+Requirements: Bun 1.3.14 and Git submodules.
 
 ```bash
-bun install
+git clone --recurse-submodules git@github.com:dungxbuif/couchloom.git
+cd couchloom
+bun install --frozen-lockfile
 bun run test
 bun run build
+```
+
+Run with either a local vault or a CouchDB vault. Multi-vault deployments should
+use a config file:
+
+```bash
+VAULTS_CONFIG_FILE=/absolute/path/vaults.json \
+MCP_AUTH_TOKEN=replace-me \
 bun run dev
 ```
 
-The remaining upstream usage guide below describes the behavior preserved by
-the migration. It will be revised as each CouchLoom MVP objective ships.
+See [`docs/vaults.schema.json`](docs/vaults.schema.json) and
+[`docs/MULTI_VAULT.md`](docs/MULTI_VAULT.md) for the exact schema.
 
-Safety override for the CouchLoom MVP: agents can read, create, and edit notes,
-but the MCP catalog never exposes `delete_note` or `move_note`. See
-[`docs/SAFE_TOOL_SURFACE.md`](docs/SAFE_TOOL_SURFACE.md).
+## RAG configuration
 
-Multi-vault foundation is configured with `VAULTS_CONFIG_FILE` (recommended on
-VM100) or `VAULTS_CONFIG`. Each entry has a stable `id`, display `name`, and a
-`local` or `couchdb` connection. Legacy single-vault environment variables
-remain accepted during migration. See [`docs/MULTI_VAULT.md`](docs/MULTI_VAULT.md).
+RAG starts when `DATABASE_URL` is set. Required variables:
 
-Call `list_vaults` first. Every note operation requires the returned `vault_id`,
-for example `read_note(vault_id="personal", path="daily/today.md")`.
+| Variable | Purpose |
+| --- | --- |
+| `DATABASE_URL` | PostgreSQL connection with pgvector available |
+| `EMBEDDING_BASE_URL` | OpenAI-compatible base URL |
+| `EMBEDDING_MODEL` | Embedding model name |
+| `EMBEDDING_DIMENSIONS` | Vector dimension matching the model |
 
-## Upstream behavior reference
+Optional tuning variables are `RAG_CHUNK_CHARS` (default `1800`) and
+`RAG_CHUNK_OVERLAP` (default `200`). Changing vector dimensions on an existing
+database requires a planned index rebuild.
 
-# Obsidian Sync MCP
+## VM100 production
 
-<!-- mcp-name: io.github.es617/obsidian-sync-mcp -->
-
-![MCP](https://img.shields.io/badge/MCP-compatible-blue)
-![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
-![Node](https://img.shields.io/badge/node-22%2B-green.svg)
-![TypeScript](https://img.shields.io/badge/TypeScript-5-blue.svg)
-
-Give any AI agent access to your Obsidian vault over MCP. Run it locally against your vault files, or pair it with [Self-hosted LiveSync](https://github.com/vrtmrz/obsidian-livesync) and deploy to the cloud so it works even when your machine is off.
-
-> **Example:** From your phone, ask your AI: "What's in my daily note for today?" — and get the full content back, with a link to open it in Obsidian.
-
----
-
-## How it works
-
-The server connects to your vault in two ways:
-
-- **Filesystem mode** — reads `.md` files directly from your vault folder. No database needed.
-- **CouchDB mode** — reads from a CouchDB database, locally or in the cloud. Your vault syncs to CouchDB via [Self-hosted LiveSync](https://github.com/vrtmrz/obsidian-livesync), the community Obsidian plugin (600k+ downloads). The MCP server reads from CouchDB directly using [livesync-commonlib](https://github.com/vrtmrz/livesync-commonlib) — the same library that powers the plugin — for proper chunk handling and E2E encryption support.
-
-Both modes expose the same MCP tools over HTTP, so any MCP-compatible agent can connect: Claude, Copilot, custom agents, anything that speaks the [Model Context Protocol](https://modelcontextprotocol.io).
-
----
-
-## Choose your setup
-
-| Need it always available? | Have LiveSync? | Go to |
-|---|---|---|
-| Yes | Yes | [Setup A](#a-deploy-mcp-to-the-cloud) — add MCP alongside your existing CouchDB |
-| Yes | No | [Setup B](#b-deploy-everything-to-the-cloud) — CouchDB + MCP + LiveSync from scratch |
-| No | — | [Setup C](#c-run-on-your-machine) — filesystem or CouchDB, npx or Docker |
-
----
-
-## A. Deploy MCP to the cloud
-
-You already have LiveSync and CouchDB on an always-on server. You just need the MCP server deployed alongside it.
-
-**Using Fly.io setup script** (macOS/Linux, or WSL on Windows):
+The production profile is portless and attaches only CouchLoom itself to the
+existing `homelab-net` overlay. PostgreSQL and Ollama remain on a private
+internal network.
 
 ```bash
-git clone https://github.com/es617/obsidian-sync-mcp.git
-cd obsidian-sync-mcp
-./deploy/setup.sh    # choose option 2 (MCP only)
+docker compose \
+  -f deploy/vm100/compose.yml \
+  --env-file /opt/apps/couchloom/run/.env \
+  up -d --build
 ```
 
-The script asks for your CouchDB connection details, vault name, and encryption passphrase.
+OpenClaw connects internally to `http://couchloom:8787/mcp` using a bearer
+token. See [`docs/VM100_RUNBOOK.md`](docs/VM100_RUNBOOK.md) and
+[`docs/OPENCLAW.md`](docs/OPENCLAW.md).
 
-**Or run the Docker image on any always-on server:**
+## Safety and source of truth
 
-```bash
-docker run -p 8787:8787 \
-  -v mcp-data:/data -e DATA_DIR=/data \
-  -e COUCHDB_URL=https://your-couchdb:5984 \
-  -e COUCHDB_USER=admin -e COUCHDB_PASSWORD=yourpassword \
-  -e COUCHDB_DATABASE=obsidian -e VAULT_NAME=MyVault \
-  -e COUCHDB_PASSPHRASE=your-encryption-passphrase \
-  -e COUCHDB_OBFUSCATE_PROPERTIES=false \
-  -e MCP_AUTH_TOKEN=yourpassword \
-  -e BASE_URL=https://your-server-url \
-  ghcr.io/es617/obsidian-sync-mcp:latest
-```
+CouchDB is always the source of truth. pgvector rows are derived and may be
+rebuilt. Keep vault credentials and MCP tokens outside Git, prefer
+`VAULTS_CONFIG_FILE`, and set secret files to mode `0600`.
 
-Set `COUCHDB_PASSPHRASE` if you use E2E encryption in LiveSync. Set `COUCHDB_OBFUSCATE_PROPERTIES=true` if "Obfuscate Properties" is also enabled in your LiveSync settings. For an existing vault the server detects the actual setting from the database at startup and corrects a mismatch with a warning; only for a brand-new empty database does the value need to match your LiveSync settings. Set `BASE_URL` to your public URL (required for OAuth callbacks when agents connect over HTTPS).
+Architecture and policy details:
 
-Your MCP endpoint is `https://your-app.fly.dev/mcp` (Fly.io) or `https://your-server:8787/mcp` (Docker behind HTTPS).
-
-See [Cost](#cost-flyio) for Fly.io pricing.
-
-Requires [flyctl](https://fly.io/docs/flyctl/install/) for the Fly.io path:
-
-```bash
-curl -L https://fly.io/install.sh | sh
-export PATH="$HOME/.fly/bin:$PATH"  # add to ~/.zshrc or ~/.bashrc
-fly auth login
-```
-
----
-
-## B. Deploy everything to the cloud
-
-Starting fresh — no LiveSync yet. Deploy CouchDB and MCP together, then set up LiveSync in Obsidian.
-
-**Using Fly.io setup script** (macOS/Linux, or WSL on Windows):
-
-```bash
-git clone https://github.com/es617/obsidian-sync-mcp.git
-cd obsidian-sync-mcp
-./deploy/setup.sh    # choose option 1 (CouchDB + MCP)
-```
-
-The script generates credentials, creates the database, and deploys. Save the credentials it prints.
-
-**Or with Docker Compose on any always-on server:**
-
-```bash
-git clone https://github.com/es617/obsidian-sync-mcp.git
-cd obsidian-sync-mcp
-
-cat > .env <<EOF
-COUCHDB_PASSWORD=changeme
-VAULT_NAME=MyVault
-EOF
-
-docker compose up -d
-```
-
-**After deployment:**
-
-1. In Obsidian, install [Self-hosted LiveSync](https://github.com/vrtmrz/obsidian-livesync) and configure it with the credentials from the setup output
-2. Your MCP endpoint is `https://your-app.fly.dev/mcp` (Fly.io) or `http://your-server:8787/mcp` (Docker)
-3. The `MCP_AUTH_TOKEN` is the password you enter when an agent connects
-
-```
-Always-on server
-├── CouchDB + persistent storage
-└── MCP server
-      ↑                    ↑
-Obsidian + LiveSync    AI agents
-```
-
-Requires [flyctl](https://fly.io/docs/flyctl/install/) for the Fly.io path:
-
-```bash
-curl -L https://fly.io/install.sh | sh
-export PATH="$HOME/.fly/bin:$PATH"  # add to ~/.zshrc or ~/.bashrc
-fly auth login
-```
-
----
-
-### Cost (Fly.io)
-
-Applies to both Setup A and Setup B.
-
-| Component | Cost |
-|---|---|
-| CouchDB + MCP VM (shared, 512MB) | ~$3-4/month (kept alive by LiveSync) |
-| MCP-only VM (shared, 256MB) | ~$0-2/month (suspends when idle) |
-| 1GB persistent volume | ~$0.15/month |
-
-As of March 2026, Fly.io [may waive charges under $5/month](https://community.fly.io/t/bill-clarification-under-5-usd-of-usage-bill-charges-are-waived/26366), which could make this effectively free with a shared IPv4. Either way, cheaper than Obsidian Sync ($4/month) and you own the data.
-
----
-
-## C. Run on your machine
-
-Run the MCP server locally. Works with filesystem mode (reads vault files directly) or CouchDB mode (if you have LiveSync). Machine must stay on for agents to reach it.
-
-**Filesystem mode (simplest):**
-
-```bash
-VAULT_PATH=~/Documents/MyVault \
-VAULT_NAME=MyVault \
-npx obsidian-sync-mcp
-```
-
-**CouchDB mode (if you have LiveSync):**
-
-```bash
-COUCHDB_URL=http://localhost:5984 \
-COUCHDB_USER=admin \
-COUCHDB_PASSWORD=yourpassword \
-COUCHDB_DATABASE=obsidian \
-COUCHDB_PASSPHRASE=your-encryption-passphrase \
-COUCHDB_OBFUSCATE_PROPERTIES=false \
-VAULT_NAME=MyVault \
-npx obsidian-sync-mcp
-```
-
-Omit `COUCHDB_PASSPHRASE` if you don't use E2E encryption in LiveSync. Set `COUCHDB_OBFUSCATE_PROPERTIES=true` if "Obfuscate Properties" is also enabled in your LiveSync settings. For an existing vault the server detects the actual setting from the database at startup and corrects a mismatch with a warning; only for a brand-new empty database does the value need to match your LiveSync settings.
-
-**Or with Docker:**
-
-```bash
-docker run -p 8787:8787 \
-  -v mcp-data:/data -e DATA_DIR=/data \
-  -e VAULT_PATH=/vault -v ~/Documents/MyVault:/vault \
-  -e VAULT_NAME=MyVault \
-  ghcr.io/es617/obsidian-sync-mcp:latest
-```
-
-Your MCP endpoint is `http://localhost:8787/mcp`.
-
-**Want remote access?** Add a tunnel (machine must stay on):
-
-```bash
-cloudflared tunnel --url http://localhost:8787    # free
-tailscale funnel 8787                             # or Tailscale
-ngrok http 8787                                   # or ngrok
-```
-
-Set `BASE_URL` to the tunnel URL when using authentication.
-
----
-
-## Tools
-
-| Tool | Description |
-|---|---|
-| `list_vaults` | List configured vault IDs and display names |
-| `read_note` | Read a note's markdown content by path |
-| `write_note` | Create or overwrite a note (replaces entire content) |
-| `edit_note` | Edit a note without rewriting it — append, prepend (after frontmatter), or replace exact text |
-| `list_folders` | List all folders in the vault with note counts — use to discover folder names |
-| `list_tags` | List all tags in the vault with counts — use to discover tags before filtering |
-| `list_notes` | List notes with timestamps. Filter by folder, name, tag, or date. Sort by name or modified. |
-| `search_notes` | Semantic pgvector search scoped by `vault_id` |
-| `get_index_status` | Show metadata checkpoint and RAG status for a vault |
-| `get_note_metadata` | Get frontmatter, tags, outgoing links, backlinks, size, and timestamps — navigate the knowledge graph |
-
-Every tool response includes an [Obsidian deep link](https://help.obsidian.md/Extending+Obsidian/Obsidian+URI) (`obsidian://open?vault=...&file=...`) that works on Mac and iOS.
-
-> "Add a bullet point to my daily note." "Find my notes about the MCP server and fix the typo in the second one."
-
----
-
-## Authentication
-
-Set `MCP_AUTH_TOKEN` to a password to enable authentication:
-
-```bash
-MCP_AUTH_TOKEN=mysecretpassword npx obsidian-sync-mcp
-```
-
-The server includes a self-contained OAuth 2.1 provider. When an agent connects:
-
-1. A browser window opens with a password page
-2. Enter the `MCP_AUTH_TOKEN` password
-3. The agent gets an access token and refreshes it transparently
-
-The session is shared across all your Claude interfaces (Desktop, Web, Mobile) and persists across server restarts. You'll need to re-enter the password after 14 days of inactivity (configurable via `MCP_REFRESH_DAYS`).
-
-For non-OAuth clients (curl, MCP Inspector, custom agents), you can also pass the token directly as `Authorization: Bearer <MCP_AUTH_TOKEN>`.
-
-Without `MCP_AUTH_TOKEN`, the server runs without authentication — suitable for local use or behind a private network.
-
----
-
-## Environment variables
-
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `VAULTS_CONFIG_FILE` | Recommended | — | JSON file containing the validated multi-vault array |
-| `VAULTS_CONFIG` | Alternative | — | Inline multi-vault JSON array; cannot be combined with `VAULTS_CONFIG_FILE` |
-| `DATABASE_URL` | For RAG | — | PostgreSQL connection string; enables pgvector RAG |
-| `EMBEDDING_BASE_URL` | For RAG | — | OpenAI-compatible API root ending in `/v1` |
-| `EMBEDDING_API_KEY` | Optional | — | Embedding API bearer token; may be empty for a trusted local endpoint |
-| `EMBEDDING_MODEL` | For RAG | — | Embedding model identifier |
-| `EMBEDDING_DIMENSIONS` | For RAG | — | Positive integer matching the model output and vector column |
-| `RAG_CHUNK_CHARS` | Optional | `1800` | Target maximum Markdown chunk size |
-| `RAG_CHUNK_OVERLAP` | Optional | `200` | Character overlap between adjacent chunks |
-| `VAULT_PATH` | Filesystem mode | — | Path to your Obsidian vault directory |
-| `COUCHDB_URL` | CouchDB mode | — | CouchDB server URL |
-| `COUCHDB_USER` | CouchDB mode | `admin` | CouchDB username |
-| `COUCHDB_PASSWORD` | CouchDB mode | — | CouchDB password (required) |
-| `COUCHDB_DATABASE` | CouchDB mode | `obsidian` | CouchDB database name |
-| `COUCHDB_PASSPHRASE` | CouchDB mode | — | LiveSync E2E encryption passphrase (must match plugin setting) |
-| `COUCHDB_OBFUSCATE_PROPERTIES` | CouchDB mode | `false` | Set to `true` if "Obfuscate Properties" is enabled in LiveSync (obfuscates file paths, sizes, dates in the database). For existing vaults the actual setting is auto-detected at startup; this value only decides the format for a brand-new empty database |
-| `VAULT_NAME` | Both | `MyVault` | Vault name (used for deep links and index storage) |
-| `MCP_AUTH_TOKEN` | Optional | — | Password for authentication |
-| `BASE_URL` | Optional | `http://localhost:PORT` | Public URL (for OAuth callbacks when using a tunnel) |
-| `PORT` | Optional | `8787` | HTTP port |
-| `HOST` | Optional | `0.0.0.0` | Bind address (`127.0.0.1` to restrict to localhost) |
-| `MCP_ALLOWED_HOSTS` | Optional | — | Comma-separated extra `Host` values accepted in no-auth mode (e.g. `192.168.1.5,mybox.local`). No-auth mode rejects any other Host to block browser DNS-rebinding; localhost is always allowed. Ignored when `MCP_AUTH_TOKEN` is set. |
-| `DATA_DIR` | Optional | `~/.couchloom` | Directory for per-vault metadata checkpoints and auth tokens |
-| `LOG_LEVEL` | Optional | — | Set to `debug` for verbose logging (library logs, change feed, index sync) |
-| `MCP_REFRESH_DAYS` | Optional | `14` | Days before auth session expires |
-| `READ_ONLY` | Optional | `false` | Set to `true` to disable `write_note` and `edit_note`. Only read tools remain exposed. |
-| `WRITE_FOLDERS` | Optional | — | Comma-separated vault-relative folders where `write_note` and `edit_note` are allowed. Matching is case-sensitive and folder-boundary-aware. |
-| `MCP_INSTRUCTIONS` | Optional | — | Extra text appended to the server's MCP `instructions` (the string clients inject into the system prompt). Use this to bake vault-specific conventions into the server — e.g. folder structure, naming rules, folders to avoid — so they apply across every MCP client without per-client config. Best-effort: not all clients respect `instructions`. |
-| `MCP_INSTRUCTIONS_FILE` | Optional | — | Path to a file (e.g. markdown) whose contents are appended to the MCP `instructions`. Easier than `MCP_INSTRUCTIONS` for multi-line conventions. If both are set, the file wins and `MCP_INSTRUCTIONS` is ignored (with a startup warning). Missing/unreadable file or files larger than 32 KB are fatal startup errors. **Store this file somewhere only the service user can write (e.g. `chmod 600`)** — its contents land in every MCP session's system prompt, so write access to it = prompt-injection access to every client. |
-
-Set `VAULT_PATH` for filesystem mode or `COUCHDB_URL` for CouchDB mode.
-
----
-
-## Try without an agent
-
-Test the server interactively using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector):
-
-```bash
-VAULT_PATH=~/Documents/MyVault npx obsidian-sync-mcp &
-npx @modelcontextprotocol/inspector
-```
-
-Set transport to **Streamable HTTP**, enter `http://localhost:8787/mcp`, and connect.
-
----
-
-## How to update
-
-| How you run it | How to update |
-|---|---|
-| `npx obsidian-sync-mcp` | Automatic — npx pulls latest |
-| Fly.io | From the same directory where you ran setup: `fly deploy`. If you lost the fly.toml, run `fly config save --app your-app-name` to restore it. |
-| Docker | `docker pull ghcr.io/es617/obsidian-sync-mcp:latest` and restart |
-
----
-
-## Known limitations
-
-- **Single vault per instance.** Each server connects to one vault. For multiple vaults, run multiple instances on different ports.
-- **Single machine on Fly.io.** Auth state is in-memory, so multiple machines break the OAuth flow. The setup script enforces this automatically.
-- **No conflict resolution.** If an agent and Obsidian edit the same note simultaneously, last write wins.
-- **Text only.** Binary attachments are not exposed through MCP tools.
-- **Deep links depend on the client.** Obsidian `obsidian://` deep links are included in every tool response. They work on Claude Mobile and in browsers, but some clients (Claude Desktop) may not render them as clickable links.
-- **Node 22+ required.**
-- **Setup script requires bash.** The `deploy/setup.sh` script works on macOS and Linux. On Windows, use WSL or Git Bash.
-
----
-
-## Safety
-
-This server gives an AI agent read/write access to your Obsidian vault.
-
-**Agents can modify and delete notes.** Keep backups. Use tool approval deliberately.
-
-**Authentication is optional.** Always set `MCP_AUTH_TOKEN` when exposing to the internet.
-
-**Use HTTPS in production.** Use a tunnel or deploy behind a reverse proxy.
-
-This software is provided as-is under the [MIT license](https://github.com/es617/obsidian-sync-mcp/blob/main/LICENSE). You are responsible for what agents do with your vault.
-
----
-
-## Development
-
-```bash
-git clone --recursive https://github.com/es617/obsidian-sync-mcp.git
-cd obsidian-sync-mcp
-npm install && npm run build
-npm test          # unit tests
-npm run test:e2e  # integration tests
-```
-
----
+- [`ARCHITECTURE.md`](ARCHITECTURE.md)
+- [`docs/RAG_ARCHITECTURE.md`](docs/RAG_ARCHITECTURE.md)
+- [`docs/SAFE_TOOL_SURFACE.md`](docs/SAFE_TOOL_SURFACE.md)
+- [`SECURITY.md`](SECURITY.md)
 
 ## License
 
-MIT — see [LICENSE](https://github.com/es617/obsidian-sync-mcp/blob/main/LICENSE).
-
-## Acknowledgements
-
-- [Self-hosted LiveSync](https://github.com/vrtmrz/obsidian-livesync) by vrtmrz — the Obsidian plugin and CouchDB sync protocol
-- [livesync-commonlib](https://github.com/vrtmrz/livesync-commonlib) by vrtmrz — the shared library for reading/writing the LiveSync document format
-- [FastMCP](https://github.com/punkpeye/fastmcp) — TypeScript MCP framework
-- [CouchDB](https://couchdb.apache.org/) — document database
-- [Fly.io](https://fly.io/) — deployment platform
+MIT. CouchLoom derives from
+[`obsidian-sync-mcp`](https://github.com/es617/obsidian-sync-mcp) and uses
+[`livesync-commonlib`](https://github.com/vrtmrz/livesync-commonlib).

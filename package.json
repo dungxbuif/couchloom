@@ -9,14 +9,14 @@
     "license": "MIT",
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/es617/obsidian-sync-mcp.git"
+        "url": "git+https://github.com/dungxbuif/couchloom.git"
     },
     "keywords": [
         "mcp",
         "obsidian",
         "livesync",
         "couchdb",
-        "claude",
+        "openclaw",
         "ai"
     ],
     "scripts": {

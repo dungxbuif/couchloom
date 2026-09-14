@@ -1,0 +1,13 @@
+[
+  {
+    "id": "personal",
+    "name": "Personal",
+    "mode": "couchdb",
+    "url": "http://couchdb:5984",
+    "database": "obsidian_vault",
+    "user": "obsidian_sync",
+    "password": "<couchdb-sync-password>",
+    "passphrase": "",
+    "obfuscatePaths": false
+  }
+]

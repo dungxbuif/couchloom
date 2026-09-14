@@ -1,0 +1,33 @@
+# CouchLoom
+
+Multi-vault CouchDB/Obsidian LiveSync knowledge service for AI agents.
+
+## Stable endpoints
+
+- GET /health: process liveness
+- GET /ready: vault and RAG dependency readiness
+- POST /mcp: authenticated MCP Streamable HTTP endpoint
+
+## MCP contract
+
+Call list_vaults first. Pass vault_id to every note and search operation.
+Available tools: list_vaults, list_folders, list_tags, list_notes, read_note,
+get_note_metadata, search_notes, get_index_status, write_note, edit_note.
+Deletion and moving are intentionally unavailable.
+
+## Configuration
+
+Prefer VAULTS_CONFIG_FILE pointing to a JSON array conforming to
+docs/vaults.schema.json. RAG requires DATABASE_URL, EMBEDDING_BASE_URL,
+EMBEDDING_MODEL, and EMBEDDING_DIMENSIONS. MCP_AUTH_TOKEN enables bearer/OAuth
+authentication.
+
+## Documentation
+
+- README.md
+- ARCHITECTURE.md
+- docs/MULTI_VAULT.md
+- docs/RAG_ARCHITECTURE.md
+- docs/SAFE_TOOL_SURFACE.md
+- docs/OPENCLAW.md
+- docs/VM100_RUNBOOK.md

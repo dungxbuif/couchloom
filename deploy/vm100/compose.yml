@@ -1,0 +1,93 @@
+name: couchloom
+
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.6-pg17-bookworm
+    container_name: couchloom-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: couchloom
+      POSTGRES_USER: couchloom
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    volumes:
+      - pgvector_data:/var/lib/postgresql/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U couchloom -d couchloom"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  ollama:
+    image: ollama/ollama:0.34.0
+    container_name: couchloom-ollama
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  ollama-model:
+    image: ollama/ollama:0.34.0
+    restart: "no"
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    command: ["pull", "${EMBEDDING_MODEL:-nomic-embed-text}"]
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - internal
+    depends_on:
+      ollama:
+        condition: service_healthy
+
+  couchloom:
+    image: couchloom:${COUCHLOOM_IMAGE_TAG:-vm100}
+    container_name: couchloom
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://couchloom:${POSTGRES_PASSWORD}@postgres:5432/couchloom
+      VAULTS_CONFIG_FILE: /run/couchloom/vaults.json
+      MCP_AUTH_TOKEN: ${MCP_AUTH_TOKEN:?Set MCP_AUTH_TOKEN}
+      BASE_URL: http://couchloom:8787
+      EMBEDDING_BASE_URL: http://ollama:11434/v1
+      EMBEDDING_API_KEY: ollama
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
+      EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:-768}
+      RAG_CHUNK_CHARS: ${RAG_CHUNK_CHARS:-1800}
+      RAG_CHUNK_OVERLAP: ${RAG_CHUNK_OVERLAP:-200}
+    volumes:
+      - couchloom_data:/data
+      - ${COUCHLOOM_RUN_DIR:?Set COUCHLOOM_RUN_DIR}/vaults.json:/run/couchloom/vaults.json:ro
+    networks:
+      - internal
+      - homelab
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama-model:
+        condition: service_completed_successfully
+
+volumes:
+  couchloom_data:
+  pgvector_data:
+  ollama_data:
+
+networks:
+  internal:
+    name: couchloom-internal
+    internal: true
+  homelab:
+    name: homelab-net
+    external: true
