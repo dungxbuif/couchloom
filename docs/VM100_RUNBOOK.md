@@ -9,14 +9,24 @@ public port.
 | Service | Network | Purpose |
 | --- | --- | --- |
 | `couchloom` | `couchloom-internal`, `homelab-net` | MCP/API, LiveSync parser, event listener, indexer |
-| `couchloom-postgres` | `couchloom-internal` only | PostgreSQL 17 + pgvector derived index |
-| `couchloom-ollama` | `couchloom-internal` only | CPU embeddings with `nomic-embed-text` |
+| `couchloom-postgres` | private `couchloom-internal` bridge only | PostgreSQL 17 + pgvector derived index |
+| `couchloom-ollama` | private `couchloom-internal` bridge only | CPU embeddings with `nomic-embed-text` |
+| `ollama-model` init job | private bridge, exits after success | Pull the pinned embedding model through bridge egress |
 | `couchdb` | existing `homelab-net` service | source-of-truth LiveSync documents |
 | `openclaw` | existing `homelab-net` service | MCP client/agent |
 
 Images are version-pinned. Vault credentials are stored in a mode-`0600`
 `vaults.json` file mounted read-only; application secrets remain in a
 mode-`0600` `.env` file. Neither file is committed.
+
+The private bridge publishes no ports, but keeps normal outbound connectivity so
+the one-shot bootstrap job can download the model. Only CouchLoom joins
+`homelab-net`; PostgreSQL and the long-running Ollama server cannot be resolved
+from other homelab workloads.
+
+Internal dependency URLs use the unique container hostnames
+`couchloom-postgres` and `couchloom-ollama`, not generic names such as
+`postgres`, to avoid DNS collisions with existing services on `homelab-net`.
 
 ## First deployment
 

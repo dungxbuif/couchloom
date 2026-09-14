@@ -39,7 +39,7 @@ services:
     image: ollama/ollama:0.34.0
     restart: "no"
     environment:
-      OLLAMA_HOST: http://ollama:11434
+      OLLAMA_HOST: http://couchloom-ollama:11434
     command: ["pull", "${EMBEDDING_MODEL:-nomic-embed-text}"]
     volumes:
       - ollama_data:/root/.ollama
@@ -57,11 +57,11 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgres://couchloom:${POSTGRES_PASSWORD}@postgres:5432/couchloom
+      DATABASE_URL: postgres://couchloom:${POSTGRES_PASSWORD}@couchloom-postgres:5432/couchloom
       VAULTS_CONFIG_FILE: /run/couchloom/vaults.json
       MCP_AUTH_TOKEN: ${MCP_AUTH_TOKEN:?Set MCP_AUTH_TOKEN}
       BASE_URL: http://couchloom:8787
-      EMBEDDING_BASE_URL: http://ollama:11434/v1
+      EMBEDDING_BASE_URL: http://couchloom-ollama:11434/v1
       EMBEDDING_API_KEY: ollama
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
       EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:-768}
@@ -87,7 +87,6 @@ volumes:
 networks:
   internal:
     name: couchloom-internal
-    internal: true
   homelab:
     name: homelab-net
     external: true
