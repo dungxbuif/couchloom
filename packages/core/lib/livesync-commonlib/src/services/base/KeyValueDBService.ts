@@ -1,0 +1,175 @@
+import type { SimpleStore } from "@lib/common/utils";
+import type { IKeyValueDBService, IVaultService } from "./IService";
+import { ServiceBase, type ServiceContext } from "./ServiceBase";
+import type { KeyValueDatabase, KeyValueDatabaseFactory } from "@lib/interfaces/KeyValueDatabase";
+import { delay, yieldMicrotask } from "octagonal-wheels/promises";
+import { LOG_LEVEL_NOTICE, LOG_LEVEL_VERBOSE } from "@lib/common/logger";
+import { createInstanceLogFunction } from "@lib/services/lib/logUtils";
+import type { InjectableDatabaseEventService } from "@lib/services/implements/injectable/InjectableDatabaseEventService";
+import type { AppLifecycleServiceBase } from "@lib/services/implements/injectable/InjectableAppLifecycleService";
+
+export interface KeyValueDBDependencies<T extends ServiceContext = ServiceContext> {
+    openKeyValueDatabase: KeyValueDatabaseFactory;
+    databaseEvents: InjectableDatabaseEventService<T>;
+    vault: IVaultService;
+    appLifecycle: AppLifecycleServiceBase<T>;
+    registerLifecycleHandlers?: boolean;
+}
+/**
+ * The KeyValueDBService provides methods for managing the local key-value database.
+ * Please note that each event of database lifecycle is handled in DatabaseEventService.
+ */
+export abstract class KeyValueDBService<T extends ServiceContext = ServiceContext>
+    extends ServiceBase<T>
+    implements IKeyValueDBService
+{
+    private _kvDB: KeyValueDatabase | undefined;
+    private _simpleStore: SimpleStore<unknown> | undefined;
+    get simpleStore() {
+        if (!this._simpleStore) {
+            throw new Error("SimpleStore is not initialized yet");
+        }
+        return this._simpleStore;
+    }
+    get kvDB() {
+        if (!this._kvDB) {
+            throw new Error("KeyValueDB is not initialized yet");
+        }
+        return this._kvDB;
+    }
+
+    private databaseEvents: InjectableDatabaseEventService<T>;
+    private vault: IVaultService;
+    private appLifecycle: AppLifecycleServiceBase<T>;
+    private openKeyValueDatabase: KeyValueDatabaseFactory;
+    private _log = createInstanceLogFunction("KeyValueDBService");
+
+    private async _everyOnResetDatabase(any: unknown): Promise<boolean> {
+        try {
+            const kvDBKey = "queued-files";
+            await this._kvDB?.del(kvDBKey);
+            // localStorage.removeItem(lsKey);
+            await this._kvDB?.destroy();
+            await yieldMicrotask();
+            this._kvDB = await this.openKeyValueDatabase(this.vault.getVaultName() + "-livesync-kv");
+            await delay(100);
+        } catch (e) {
+            this._kvDB = undefined!;
+            this._log("Failed to reset KeyValueDB", LOG_LEVEL_NOTICE);
+            this._log(e, LOG_LEVEL_VERBOSE);
+            return false;
+        }
+        return true;
+    }
+
+    private async tryCloseKvDB() {
+        try {
+            await this._kvDB?.close();
+            return true;
+        } catch (e) {
+            this._log("Failed to close KeyValueDB", LOG_LEVEL_VERBOSE);
+            this._log(e);
+            return false;
+        }
+    }
+    private async openKeyValueDB(): Promise<boolean> {
+        await delay(10);
+        try {
+            await this.tryCloseKvDB();
+            await delay(10);
+            await yieldMicrotask();
+            this._kvDB = await this.openKeyValueDatabase(this.vault.getVaultName() + "-livesync-kv");
+            await yieldMicrotask();
+            await delay(100);
+        } catch (e) {
+            this._kvDB = undefined!;
+            this._log("Failed to open KeyValueDB", LOG_LEVEL_NOTICE);
+            this._log(e, LOG_LEVEL_VERBOSE);
+            return false;
+        }
+        return true;
+    }
+    // Called when another database; LiveSyncLocalDB, is being unloaded.
+    // We need to close our KeyValueDB to avoid IndexedDB locking issues.
+    private async _onOtherDatabaseUnload() {
+        if (this._kvDB) await this.tryCloseKvDB();
+        return Promise.resolve(true);
+    }
+    // Also, Called when another database; LiveSyncLocalDB, is being closed.
+    // We need to close our KeyValueDB to avoid IndexedDB locking issues.
+    private async _onOtherDatabaseClose() {
+        if (this._kvDB) await this.tryCloseKvDB();
+        return Promise.resolve(true);
+    }
+
+    private _everyOnInitializeDatabase(any: unknown): Promise<boolean> {
+        return this.openKeyValueDB();
+    }
+
+    private async _everyOnloadAfterLoadSettings(): Promise<boolean> {
+        if (!(await this.openKeyValueDB())) {
+            return false;
+        }
+        this._simpleStore = this.openSimpleStore<unknown>("os");
+        return Promise.resolve(true);
+    }
+
+    constructor(context: T, dependencies: KeyValueDBDependencies<T>) {
+        super(context);
+        this.databaseEvents = dependencies.databaseEvents;
+        this.vault = dependencies.vault;
+        this.appLifecycle = dependencies.appLifecycle;
+        this.openKeyValueDatabase = dependencies.openKeyValueDatabase;
+        if (dependencies.registerLifecycleHandlers ?? true) {
+            this.databaseEvents.onResetDatabase.addHandler(this._everyOnResetDatabase.bind(this));
+            this.appLifecycle.onSettingLoaded.addHandler(this._everyOnloadAfterLoadSettings.bind(this));
+            this.databaseEvents.onDatabaseInitialisation.addHandler(this._everyOnInitializeDatabase.bind(this));
+            this.databaseEvents.onUnloadDatabase.addHandler(this._onOtherDatabaseUnload.bind(this));
+            this.databaseEvents.onCloseDatabase.addHandler(this._onOtherDatabaseClose.bind(this));
+        }
+    }
+
+    openSimpleStore<T>(kind: string) {
+        // Creating a namespaced handle is intentionally safe during service
+        // composition, before onSettingLoaded has opened the backing database.
+        // Operations remain fail-fast: maintained hosts complete the sequential
+        // onSettingLoaded lifecycle before scans, watchers, or replication can
+        // use the handle. We must not wait here because a failed or omitted
+        // lifecycle transition would otherwise wait forever, and a store access
+        // from an initialisation handler could wait on its own completion.
+        // Database reset is also a transient unavailable boundary; callers must
+        // not perform store work during reset and can reconstruct derived state
+        // after the database has reopened.
+        const getDB = () => {
+            if (!this._kvDB) {
+                throw new Error("KeyValueDB is not initialized yet");
+            }
+            return this._kvDB;
+        };
+        const prefix = `${kind}-`;
+        return {
+            get: async (key: string): Promise<T> => {
+                return await getDB().get(`${prefix}${key}`);
+            },
+            set: async (key: string, value: unknown): Promise<void> => {
+                await getDB().set(`${prefix}${key}`, value);
+            },
+            delete: async (key: string): Promise<void> => {
+                await getDB().del(`${prefix}${key}`);
+            },
+            keys: async (from: string | undefined, to: string | undefined, count?: number): Promise<string[]> => {
+                const ret = await getDB().keys(
+                    IDBKeyRange.bound(`${prefix}${from || ""}`, `${prefix}${to || ""}`),
+                    count
+                );
+                return ret
+                    .map((e) => (typeof e === "string" ? e : JSON.stringify(e)).toString())
+                    .filter((e) => e.startsWith(prefix))
+                    .map((e) => e.substring(prefix.length));
+            },
+            get db() {
+                return Promise.resolve(getDB());
+            },
+        } satisfies SimpleStore<T>;
+    }
+}

@@ -1,0 +1,186 @@
+import { type AppLifecycleService, type AppLifecycleServiceDependencies } from "@lib/services/base/AppLifecycleService";
+
+import { InjectableAppLifecycleService } from "@lib/services/implements/injectable/InjectableAppLifecycleService";
+import { InjectableConflictService } from "@lib/services/implements/injectable/InjectableConflictService";
+import { InjectableDatabaseEventService } from "@lib/services/implements/injectable/InjectableDatabaseEventService";
+import { InjectableFileProcessingService } from "@lib/services/implements/injectable/InjectableFileProcessingService";
+import { PathServiceCompat } from "@lib/services/implements/injectable/InjectablePathService";
+import { InjectableRemoteService } from "@lib/services/implements/injectable/InjectableRemoteService";
+import { InjectableReplicationService } from "@lib/services/implements/injectable/InjectableReplicationService";
+import { InjectableReplicatorService } from "@lib/services/implements/injectable/InjectableReplicatorService";
+import { InjectableTestService } from "@lib/services/implements/injectable/InjectableTestService";
+import { InjectableTweakValueService } from "@lib/services/implements/injectable/InjectableTweakValueService";
+import { InjectableVaultServiceCompat } from "@lib/services/implements/injectable/InjectableVaultService";
+import { ServiceContext } from "@lib/services/base/ServiceBase";
+import { ConfigServiceBrowserCompat } from "@lib/services/implements/browser/ConfigServiceBrowserCompat";
+import { InjectableServiceHub } from "@lib/services/implements/injectable/InjectableServiceHub";
+import type { ServiceInstances } from "@lib/services/ServiceHub";
+
+import { UIService } from "@lib/services/implements/base/UIService";
+import { HeadlessAPIService } from "./implements/headless/HeadlessAPIService";
+import { HeadlessDatabaseService, HeadlessKeyValueDBService } from "./implements/headless/HeadlessDatabaseService";
+import type { ComponentHasResult, SvelteDialogManager } from "./implements/base/SvelteDialog";
+import type { DatabaseService } from "@lib/services/base/DatabaseService.ts";
+import { ControlService } from "./base/ControlService";
+import { InjectableSettingService } from "./implements/injectable/InjectableSettingService";
+import type { Constructor } from "@lib/common/utils.type";
+import { createIndexedDBKeyValueDatabaseFactory } from "@lib/databases/IndexedDBKeyValueDatabase";
+import type { KeyValueDatabaseFactory } from "@lib/interfaces/KeyValueDatabase";
+import type { PouchDBConstructor } from "@lib/pouchdb/PouchDBConstructor.ts";
+import type { ObsidianLiveSyncSettings } from "@lib/common/types";
+
+class HeadlessAppLifecycleService<T extends ServiceContext> extends InjectableAppLifecycleService<T> {
+    constructor(context: T, dependencies: AppLifecycleServiceDependencies) {
+        super(context, dependencies);
+        // The main entry point when the environment is ready
+        // const onReady = this.onReady.bind(this);
+        // In headless, we must call onReady externally when ready
+    }
+}
+
+class HeadlessSvelteDialogManager<T extends ServiceContext> implements SvelteDialogManager<T> {
+    openSvelteDialog<T, U>(component: ComponentHasResult<T, U>, initialData?: U): Promise<T | undefined> {
+        throw new Error("Method not implemented.");
+    }
+    open<T, U = T>(component: ComponentHasResult<T, U>, initialData?: U): Promise<T | undefined> {
+        return this.openSvelteDialog(component, initialData);
+    }
+    openWithExplicitCancel<T, U = T>(component: ComponentHasResult<T, U>, initialData?: U): Promise<T> {
+        throw new Error("Method not implemented.");
+    }
+}
+
+type HeadlessUIServiceDependencies<T extends ServiceContext = ServiceContext> = {
+    APIService: HeadlessAPIService<T>;
+};
+
+class HeadlessUIService<T extends ServiceContext> extends UIService<T> {
+    override get dialogToCopy(): never {
+        throw new Error("Method not implemented.");
+    }
+    constructor(context: T, dependents: HeadlessUIServiceDependencies<T>) {
+        const headlessSvelteDialogManager = new HeadlessSvelteDialogManager<T>();
+        super(context, {
+            dialogManager: headlessSvelteDialogManager,
+            APIService: dependents.APIService,
+        });
+    }
+}
+// type Constructor<T> = new (...args: any[]) => T;
+
+export class HeadlessServiceHub<T extends ServiceContext> extends InjectableServiceHub<T> {
+    constructor(
+        _context: T | undefined,
+        overrideServiceConstructor: {
+            /** PouchDB with the adapters required by this headless runtime. */
+            pouchDB: PouchDBConstructor;
+            database?: Constructor<DatabaseService<T>>;
+            openKeyValueDatabase?: KeyValueDatabaseFactory;
+            onDisplayLanguageChanged?: (language: ObsidianLiveSyncSettings["displayLanguage"]) => void;
+            /** Optional host capability when path obfuscation uses a secret distinct from content encryption. */
+            getPathObfuscationPassphrase?: () => string | false;
+            /** Direct database clients do not run application-level replication or key-value database lifecycles. */
+            databaseLifecycleMode?: "application" | "direct-access";
+        }
+    ) {
+        const context = (_context ?? new ServiceContext()) as T;
+        const registerApplicationDatabaseLifecycle =
+            (overrideServiceConstructor.databaseLifecycleMode ?? "application") === "application";
+        const API = new HeadlessAPIService<T>(context);
+        const conflict = new InjectableConflictService(context);
+        const fileProcessing = new InjectableFileProcessingService(context);
+
+        const setting = new InjectableSettingService(context, {
+            APIService: API,
+            onDisplayLanguageChanged: overrideServiceConstructor.onDisplayLanguageChanged,
+        });
+        const appLifecycle = new HeadlessAppLifecycleService<T>(context, {
+            settingService: setting,
+        });
+        const remote = new InjectableRemoteService(context, {
+            pouchDB: overrideServiceConstructor.pouchDB,
+            APIService: API,
+            appLifecycle: appLifecycle,
+            setting: setting,
+        });
+        const tweakValue = new InjectableTweakValueService(context);
+        const vault = new InjectableVaultServiceCompat(context, {
+            settingService: setting,
+            APIService: API,
+        });
+        const test = new InjectableTestService(context);
+        const databaseEvents = new InjectableDatabaseEventService(context);
+        const path = new PathServiceCompat(context, {
+            settingService: setting,
+            getPathObfuscationPassphrase: overrideServiceConstructor.getPathObfuscationPassphrase,
+        });
+        const database = new (overrideServiceConstructor.database ?? HeadlessDatabaseService<T>)(context, {
+            pouchDB: overrideServiceConstructor.pouchDB,
+            API: API,
+            path: path,
+            vault: vault,
+            setting: setting,
+        });
+        const config = new ConfigServiceBrowserCompat<T>(context, {
+            settingService: setting,
+            APIService: API,
+        });
+        const replicator = new InjectableReplicatorService(context, {
+            settingService: setting,
+            appLifecycleService: appLifecycle,
+            databaseEventService: databaseEvents,
+            registerLifecycleHandlers: registerApplicationDatabaseLifecycle,
+        });
+        const replication = new InjectableReplicationService(context, {
+            APIService: API,
+            appLifecycleService: appLifecycle,
+            replicatorService: replicator,
+            settingService: setting,
+            fileProcessingService: fileProcessing,
+            databaseService: database,
+        });
+
+        const keyValueDB = new HeadlessKeyValueDBService(context, {
+            openKeyValueDatabase:
+                overrideServiceConstructor.openKeyValueDatabase ?? createIndexedDBKeyValueDatabaseFactory(),
+            appLifecycle: appLifecycle,
+            databaseEvents: databaseEvents,
+            vault: vault,
+            registerLifecycleHandlers: registerApplicationDatabaseLifecycle,
+        });
+        const control = new ControlService(context, {
+            appLifecycleService: appLifecycle,
+            settingService: setting,
+            databaseService: database,
+            fileProcessingService: fileProcessing,
+            APIService: API,
+            replicatorService: replicator,
+        });
+        const ui = new HeadlessUIService<T>(context, {
+            APIService: API,
+        });
+        // Using 'satisfies' to ensure all services are provided
+        const serviceInstancesToInit = {
+            appLifecycle: appLifecycle,
+            conflict: conflict,
+            database: database,
+            databaseEvents: databaseEvents,
+            fileProcessing: fileProcessing,
+            replication: replication,
+            replicator: replicator,
+            remote: remote,
+            setting: setting,
+            tweakValue: tweakValue,
+            vault: vault,
+            test: test,
+            ui: ui,
+            path: path,
+            API: API,
+            config: config,
+            keyValueDB: keyValueDB,
+            control: control,
+        } satisfies Required<ServiceInstances<T>>;
+
+        super(context, serviceInstancesToInit);
+    }
+}

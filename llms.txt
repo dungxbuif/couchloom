@@ -22,6 +22,15 @@ docs/vaults.schema.json. RAG requires DATABASE_URL, EMBEDDING_BASE_URL,
 EMBEDDING_MODEL, and EMBEDDING_DIMENSIONS. MCP_AUTH_TOKEN enables bearer/OAuth
 authentication.
 
+Clone normally; this repository has no Git submodules. Generate a bearer token
+with `openssl rand -hex 32`. Store the same secret as MCP_AUTH_TOKEN for
+CouchLoom and COUCHLOOM_MCP_TOKEN for OpenClaw, outside Git in mode-0600
+environment files. OpenClaw uses transport `streamable-http` at `/mcp`.
+
+LiveSync compatibility source is owned in-tree at
+packages/core/lib/livesync-commonlib, imported from upstream commit
+50d4ab9c1a7d4f59ab29c7555b8dfb2d69555e92.
+
 ## Documentation
 
 - README.md

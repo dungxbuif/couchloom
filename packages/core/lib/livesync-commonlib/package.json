@@ -1,0 +1,14 @@
+{
+  "name": "@couchloom/livesync-commonlib",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "imports": {
+    "#worker": {
+      "browser": "./src/worker/bgWorker.ts",
+      "deno": "./src/worker/bgWorker.direct.ts",
+      "node": "./src/worker/bgWorker.direct.ts",
+      "default": "./src/worker/bgWorker.direct.ts"
+    }
+  }
+}

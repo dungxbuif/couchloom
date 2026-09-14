@@ -118,11 +118,20 @@ interface VaultBackend {
 - Filters `.obsidian/` directory
 
 ### CouchDB Vault (`packages/core/src/vault.ts`)
-- `DirectFileManipulator` for all CouchDB operations
+- `DirectFileManipulator` from the internally vendored LiveSync component for
+  CouchDB reads, writes, encryption, and chunk reconstruction
 - `validatePath()` blocks null bytes, `..`, absolute paths, length > 1000
 - `catchUp()` uses PouchDB `_changes` API directly (same selector as live watcher)
-- `watchChanges()` uses `beginWatch` for live `_changes` feed
+- `watchChanges()` owns a raw live `_changes` feed so hard tombstones without
+  path/type metadata can be resolved through the hydrated document-id map
 - Shared `docToChange()` and `mdFilter()` helpers for both catch-up and live watch
+
+The compatibility component lives at
+`packages/core/lib/livesync-commonlib`. It is ordinary CouchLoom source, not a
+Git submodule, and was imported from upstream commit
+`50d4ab9c1a7d4f59ab29c7555b8dfb2d69555e92`. CouchLoom keeps only the runtime
+source and upstream license; upstream repository/release/test administration is
+not part of this repository.
 
 ## Authentication (`apps/server/src/auth.ts`)
 
@@ -174,7 +183,8 @@ livesync-commonlib is a Deno-style TypeScript library compiled for Node via tsup
 
 ## Dependencies
 
-- **livesync-commonlib** (git submodule) — CouchDB document handling, chunk reassembly, E2E encryption
+- **vendored LiveSync component** — CouchDB document handling, chunk
+  reassembly, and E2E encryption owned inside `packages/core/lib`
 - **FastMCP** — MCP server framework
 - **Hono** — HTTP framework (used by FastMCP, we add OAuth routes)
 - **PouchDB** — CouchDB client (transitive via livesync-commonlib)

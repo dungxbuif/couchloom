@@ -11,7 +11,7 @@ or move.
 ## Repository layout
 
 - `packages/core` — reusable LiveSync backends, metadata index, vault registry,
-  and MCP note tools.
+  MCP note tools, and the vendored LiveSync compatibility source.
 - `packages/rag` — deterministic Markdown chunking, OpenAI-compatible
   embeddings, and vault-scoped pgvector storage.
 - `apps/server` — configuration, lifecycle, authentication, HTTP health, and
@@ -48,10 +48,11 @@ registered.
 
 ## Local development
 
-Requirements: Bun 1.3.14 and Git submodules.
+Requirement: Bun 1.3.14. The repository is self-contained; no submodule setup
+is required.
 
 ```bash
-git clone --recurse-submodules git@github.com:dungxbuif/couchloom.git
+git clone git@github.com:dungxbuif/couchloom.git
 cd couchloom
 bun install --frozen-lockfile
 bun run test
@@ -62,10 +63,14 @@ Run with either a local vault or a CouchDB vault. Multi-vault deployments should
 use a config file:
 
 ```bash
+export MCP_AUTH_TOKEN="$(openssl rand -hex 32)"
 VAULTS_CONFIG_FILE=/absolute/path/vaults.json \
-MCP_AUTH_TOKEN=replace-me \
 bun run dev
 ```
+
+Store `MCP_AUTH_TOKEN` in a mode-`0600` environment file for persistent use;
+do not commit its value. OpenClaw receives the same secret as
+`COUCHLOOM_MCP_TOKEN`; see [`docs/OPENCLAW.md`](docs/OPENCLAW.md).
 
 See [`docs/vaults.schema.json`](docs/vaults.schema.json) and
 [`docs/MULTI_VAULT.md`](docs/MULTI_VAULT.md) for the exact schema.
@@ -119,4 +124,7 @@ Architecture and policy details:
 
 MIT. CouchLoom derives from
 [`obsidian-sync-mcp`](https://github.com/es617/obsidian-sync-mcp) and uses
-[`livesync-commonlib`](https://github.com/vrtmrz/livesync-commonlib).
+[`livesync-commonlib`](https://github.com/vrtmrz/livesync-commonlib). Its
+LiveSync compatibility source is vendored under
+`packages/core/lib/livesync-commonlib` from upstream commit
+`50d4ab9c1a7d4f59ab29c7555b8dfb2d69555e92` and retains the upstream license.
