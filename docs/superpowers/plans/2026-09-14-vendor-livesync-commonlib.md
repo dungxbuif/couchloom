@@ -32,7 +32,7 @@
 - Consumes: current gitlink pinned at `50d4ab9c1a7d4f59ab29c7555b8dfb2d69555e92`
 - Produces: normal tracked files at the same source path
 
-- [ ] **Step 1: Capture the pre-migration invariant**
+- [x] **Step 1: Capture the pre-migration invariant**
 
 Run:
 
@@ -44,7 +44,7 @@ rtk git -C packages/core/lib/livesync-commonlib status --short
 
 Expected: pinned SHA above, mode `160000`, and a clean nested worktree.
 
-- [ ] **Step 2: Remove the gitlink without deleting the worktree**
+- [x] **Step 2: Remove the gitlink without deleting the worktree**
 
 Run:
 
@@ -54,19 +54,19 @@ rtk git rm --cached packages/core/lib/livesync-commonlib
 
 Expected: only the parent index entry is removed; files remain on disk.
 
-- [ ] **Step 3: Remove submodule metadata**
+- [x] **Step 3: Remove submodule metadata**
 
 Use `apply_patch` to delete `.gitmodules`. Remove the exact nested metadata file
 `packages/core/lib/livesync-commonlib/.git`; do not recursively target a parent
 directory.
 
-- [ ] **Step 4: Exclude upstream-only repository files**
+- [x] **Step 4: Exclude upstream-only repository files**
 
 Remove upstream `.github`, dependency caches, coverage/build output and release
 tooling only after confirming they are not imported by CouchLoom's build. Keep
 `src`, `LICENSE`, package/TypeScript metadata, and required runtime assets.
 
-- [ ] **Step 5: Add and verify ordinary files**
+- [x] **Step 5: Add and verify ordinary files**
 
 Run:
 
@@ -90,13 +90,13 @@ Expected: regular file modes under the library and no `160000` entries.
 - Consumes: self-contained source tree from Task 1
 - Produces: human and agent-readable clone/token setup
 
-- [ ] **Step 1: Update clone instructions**
+- [x] **Step 1: Update clone instructions**
 
 Replace the submodule requirement and `git clone --recurse-submodules` with an
 ordinary clone. State that LiveSync compatibility source is vendored at
 `packages/core/lib/livesync-commonlib` from the pinned upstream SHA.
 
-- [ ] **Step 2: Document token generation and mapping**
+- [x] **Step 2: Document token generation and mapping**
 
 Add this exact generation command:
 
@@ -108,7 +108,7 @@ Document that the same secret is stored as `MCP_AUTH_TOKEN` for CouchLoom and
 `COUCHLOOM_MCP_TOKEN` for OpenClaw, in mode-`0600` environment files outside
 Git. Keep the existing `streamable-http` configuration and probe command.
 
-- [ ] **Step 3: Update the AI-readable surface**
+- [x] **Step 3: Update the AI-readable surface**
 
 Update `llms.txt` so an agent knows a normal clone is sufficient, how the token
 is generated/mapped, and that delete/move remain unavailable.
@@ -122,12 +122,12 @@ is generated/mapped, and that delete/move remain unavailable.
 - Consumes: Tasks 1–2
 - Produces: reproducible migration commit
 
-- [ ] **Step 1: Check repository invariants and secrets**
+- [x] **Step 1: Check repository invariants and secrets**
 
 Run checks for `.gitmodules`, nested `.git`, mode `160000`, generated folders,
 and known credential patterns. Expected: none, except documented placeholders.
 
-- [ ] **Step 2: Run the complete test and build suite**
+- [x] **Step 2: Run the complete test and build suite**
 
 Run in the pinned Bun container:
 
@@ -140,13 +140,13 @@ docker build -t couchloom:vendor-validation .
 
 Expected: all commands exit zero.
 
-- [ ] **Step 3: Verify a clean clone without submodules**
+- [x] **Step 3: Verify a clean clone without submodules**
 
 Create a temporary clone from the local repository, confirm the vendored source
 and license are present, and run the production Docker build without any
 submodule command. Remove only that exact temporary clone afterward.
 
-- [ ] **Step 4: Commit the migration**
+- [x] **Step 4: Commit the migration**
 
 ```bash
 git add -A

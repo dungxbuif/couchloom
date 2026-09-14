@@ -1,5 +1,7 @@
 # Vendor LiveSync Common Library Into CouchLoom
 
+Status: implemented in CouchLoom commit `91e64cc`.
+
 ## Decision
 
 CouchLoom will stop using `livesync-commonlib` as a Git submodule. The exact
