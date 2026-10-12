@@ -10,9 +10,10 @@ import type { MetaEntry } from "../lib/livesync-commonlib/src/API/DirectFileMani
 import { isPathProbablyObfuscated, decrypt } from "octagonal-wheels/encryption/encryption";
 import { clearHandlers } from "../lib/livesync-commonlib/src/replication/SyncParamsHandler.ts";
 import { parseFrontmatterAndLinks } from "./parse.js";
-import type { VaultBackend, NoteInfo, NoteListing } from "./vault-backend.js";
+import type { VaultBackend, NoteInfo, NoteListing, VaultChangeCallback } from "./vault-backend.js";
 import { deriveContent } from "./index-sync.js";
 import { classifyIds, type IdFormat } from "./id-format.js";
+import { AcknowledgedChangeStream } from "./change-ack.js";
 
 export interface VaultConfig {
     couchdbUrl: string;
@@ -39,6 +40,7 @@ export class Vault implements VaultBackend {
     private config: VaultConfig;
     private watchedPaths = new Map<string, string>();
     private liveChanges: any;
+    private acknowledgedChanges?: AcknowledgedChangeStream;
     private watchReconnectTimer?: ReturnType<typeof setTimeout>;
     private closing = false;
 
@@ -140,6 +142,7 @@ export class Vault implements VaultBackend {
         this.closing = true;
         if (this.watchReconnectTimer) clearTimeout(this.watchReconnectTimer);
         this.liveChanges?.cancel();
+        await this.acknowledgedChanges?.drain().catch(() => undefined);
         this.manipulator.endWatch();
         await this.manipulator.close();
     }
@@ -148,17 +151,17 @@ export class Vault implements VaultBackend {
         return (meta.path ?? "").endsWith(".md");
     }
 
-    private static docToChange(doc: any, callback: (path: string, content: string | null, mtime?: number, seq?: string | number) => void, seq?: string | number) {
+    private static async docToChange(doc: any, callback: VaultChangeCallback, seq?: string | number): Promise<void> {
         const path = doc.path ?? "";
         if (!path.endsWith(".md")) return;
         // null => deleted (remove); "" => existing empty note (index it, don't drop)
         const content = deriveContent(doc);
-        callback(path, content, content === null ? undefined : doc.mtime, seq);
+        await callback(path, content, content === null ? undefined : doc.mtime, seq);
     }
 
     async catchUp(
         since: string,
-        callback: (path: string, content: string | null, mtime?: number) => void,
+        callback: VaultChangeCallback,
         onBatch?: (since: string, processed: number) => Promise<void>,
     ): Promise<string> {
         // Paginate _changes in batches to limit memory usage.
@@ -189,7 +192,7 @@ export class Vault implements VaultBackend {
                 }
                 if (!path.endsWith(".md") && !meta.deleted) continue;
                 const doc = await this.manipulator.getByMeta(meta).catch(() => null);
-                if (doc) Vault.docToChange(doc, callback);
+                if (doc) await Vault.docToChange(doc, callback, change.seq);
             }
 
             totalProcessed += result.results.length;
@@ -211,7 +214,7 @@ export class Vault implements VaultBackend {
         return currentSince;
     }
 
-    async watchChanges(callback: (path: string, content: string | null, mtime?: number, seq?: string | number) => void): Promise<void> {
+    async watchChanges(callback: VaultChangeCallback): Promise<void> {
         // Hard CouchDB tombstones only retain _id/_rev/_deleted. Build this map
         // before opening the feed so external hard deletes can still evict the
         // corresponding metadata and vector rows.
@@ -222,28 +225,55 @@ export class Vault implements VaultBackend {
 
         // catchUp already set this.manipulator.since to the right point
         const start = () => {
-            this.liveChanges = this.manipulator.liveSyncLocalDB.localDatabase
-                .changes({ include_docs: true, since: this.manipulator.since, live: true })
-                .on("change", async (change: any) => {
-                    const doc = change.doc;
-                    if (!doc) return;
-                    this.manipulator.since = String(change.seq);
-                    if (doc._deleted) {
-                        const path = this.watchedPaths.get(doc._id);
-                        if (!path) return;
-                        this.watchedPaths.delete(doc._id);
-                        callback(path, null, undefined, change.seq);
-                        return;
-                    }
-                    if (doc.type === "leaf" || doc.type === "versioninfo" || !Vault.mdFilter(doc)) return;
-                    if (doc._id) this.watchedPaths.set(doc._id, doc.path);
-                    const ready = await this.manipulator.getByMeta(doc).catch(() => null);
-                    if (ready) Vault.docToChange(ready, callback, change.seq);
+            const generation = new AcknowledgedChangeStream(String(this.manipulator.since || "0"));
+            this.acknowledgedChanges = generation;
+            let retiring = false;
+            const feed = this.manipulator.liveSyncLocalDB.localDatabase.changes({
+                include_docs: true,
+                since: generation.checkpoint,
+                live: true,
+            });
+            this.liveChanges = feed;
+
+            const retire = () => {
+                if (retiring || this.closing || this.acknowledgedChanges !== generation) return;
+                retiring = true;
+                feed.cancel();
+                void generation
+                    .drain()
+                    .catch(() => undefined)
+                    .finally(() => {
+                        if (this.closing || this.acknowledgedChanges !== generation) return;
+                        this.manipulator.since = generation.checkpoint;
+                        this.acknowledgedChanges = undefined;
+                        this.watchReconnectTimer = setTimeout(start, 10_000);
+                    });
+            };
+
+            feed
+                .on("change", (change: any) => {
+                    if (retiring || this.acknowledgedChanges !== generation) return;
+                    void generation.enqueue(String(change.seq), async () => {
+                        const doc = change.doc;
+                        if (!doc) return;
+                        if (doc._deleted) {
+                            const path = this.watchedPaths.get(doc._id);
+                            if (!path) return;
+                            await callback(path, null, undefined, change.seq);
+                            this.watchedPaths.delete(doc._id);
+                            return;
+                        }
+                        if (doc.type === "leaf" || doc.type === "versioninfo" || !Vault.mdFilter(doc)) return;
+                        if (doc._id) this.watchedPaths.set(doc._id, doc.path);
+                        const ready = await this.manipulator.getByMeta(doc).catch(() => null);
+                        if (ready) await Vault.docToChange(ready, callback, change.seq);
+                    })
+                        .then(() => {
+                            if (this.acknowledgedChanges === generation) this.manipulator.since = generation.checkpoint;
+                        })
+                        .catch(retire);
                 })
-                .on("error", () => {
-                    if (this.closing) return;
-                    this.watchReconnectTimer = setTimeout(start, 10_000);
-                });
+                .on("error", retire);
         };
         start();
     }
