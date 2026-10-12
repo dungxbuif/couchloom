@@ -3,17 +3,21 @@
     "version": "0.1.0",
     "private": true,
     "type": "module",
-    "bin": { "couchloom": "dist/main.js" },
+    "bin": {
+        "couchloom": "dist/main.js"
+    },
     "scripts": {
         "build": "tsup",
         "dev": "bun src/main.ts",
         "start": "bun dist/main.js",
-        "test": "bun test test/unit"
+        "test": "bun test test/unit",
+        "test:integration": "bun test test/integration"
     },
     "dependencies": {
         "@couchloom/core": "workspace:*",
         "@couchloom/rag": "workspace:*",
         "fastmcp": "^3.34.0",
-        "octagonal-wheels": "^0.1.39"
+        "octagonal-wheels": "^0.1.39",
+        "pg-boss": "12.37.1"
     }
 }
