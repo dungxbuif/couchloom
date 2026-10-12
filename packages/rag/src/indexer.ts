@@ -22,6 +22,14 @@ export interface VectorDocument {
     chunks: VectorChunk[];
 }
 
+export interface VectorDocumentState {
+    path: string;
+    contentHash: string;
+    mtime: number;
+    embeddingModel: string;
+    updatedAt: string;
+}
+
 export interface SemanticResult {
     vaultId: string;
     path: string;
@@ -32,10 +40,17 @@ export interface SemanticResult {
 
 export interface VectorStore {
     getDocumentHash(vaultId: string, path: string): Promise<string | null>;
+    getDocumentState(vaultId: string, path: string): Promise<VectorDocumentState | null>;
     replaceDocument(document: VectorDocument): Promise<void>;
     deleteDocument(vaultId: string, path: string): Promise<void>;
+    listDocuments(vaultId: string): Promise<VectorDocumentState[]>;
+    countDocuments(vaultId: string): Promise<number>;
     search(embedding: number[], vaultIds: string[], limit: number): Promise<SemanticResult[]>;
     close(): Promise<void>;
+}
+
+export function hashDocumentContent(content: string): string {
+    return createHash("sha256").update(content).digest("hex");
 }
 
 export interface DocumentChange {
@@ -57,8 +72,9 @@ export class RagIndexer {
             await this.store.deleteDocument(change.vaultId, change.path);
             return "deleted";
         }
-        const contentHash = createHash("sha256").update(change.content).digest("hex");
-        if (await this.store.getDocumentHash(change.vaultId, change.path) === contentHash) return "unchanged";
+        const contentHash = hashDocumentContent(change.content);
+        const existing = await this.store.getDocumentState(change.vaultId, change.path);
+        if (existing?.contentHash === contentHash && existing.embeddingModel === this.embeddings.model) return "unchanged";
         const chunks = chunkMarkdown(change.content, this.chunkOptions);
         const vectors = await this.embeddings.embed(chunks.map(({ content }) => content));
         if (vectors.length !== chunks.length || vectors.some((vector) => vector.length !== this.embeddings.dimensions)) {

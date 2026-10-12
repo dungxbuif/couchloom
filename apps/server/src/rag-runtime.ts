@@ -1,4 +1,4 @@
-import { OpenAICompatibleEmbeddings, PgVectorStore, RagIndexer, type SemanticResult } from "@couchloom/rag";
+import { OpenAICompatibleEmbeddings, PgVectorStore, RagIndexer, type SemanticResult, type VectorDocumentState } from "@couchloom/rag";
 
 type Environment = Record<string, string | undefined>;
 
@@ -41,6 +41,14 @@ export class RagRuntime {
 
     search(query: string, vaultIds: string[], limit?: number): Promise<SemanticResult[]> {
         return this.#indexer.search(query, vaultIds, limit);
+    }
+
+    listDocuments(vaultId: string): Promise<VectorDocumentState[]> {
+        return this.#store.listDocuments(vaultId);
+    }
+
+    countDocuments(vaultId: string): Promise<number> {
+        return this.#store.countDocuments(vaultId);
     }
 
     close(): Promise<void> {

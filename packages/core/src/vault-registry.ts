@@ -8,7 +8,25 @@ export interface VaultContext {
     searchIndex: SearchIndex;
     onDocumentChange?: (path: string, content: string | null, mtime?: number) => Promise<void>;
     semanticSearch?: (query: string, limit?: number) => Promise<SemanticSearchResult[]>;
-    ragStatus?: () => { enabled: boolean; model?: string };
+    ragStatus?: () => RagStatus | Promise<RagStatus>;
+}
+
+export type RagState = "disabled" | "ready" | "backfilling" | "degraded";
+
+export interface RagStatus {
+    enabled: boolean;
+    state: RagState;
+    model: string | null;
+    expected: number;
+    indexed: number;
+    backlog: number;
+    failed: number;
+    coverage: number;
+    oldestJobAgeSeconds: number | null;
+    lastSuccessAt: string | null;
+    lastError: string | null;
+    lastReconciliationAt: string | null;
+    checkpoint: string | null;
 }
 
 export interface SemanticSearchResult {

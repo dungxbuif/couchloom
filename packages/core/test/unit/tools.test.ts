@@ -5,7 +5,10 @@ import { registerTools } from "../../src/tools.js";
 import type { VaultBackend } from "../../src/vault-backend.js";
 import { VaultRegistry } from "../../src/vault-registry.js";
 
-function registeredTools(readOnly = false): Array<{ name: string; parameters: { parse(value: unknown): unknown }; execute: (args: any) => Promise<unknown> }> {
+function registeredTools(
+    readOnly = false,
+    ragStatus?: () => unknown | Promise<unknown>,
+): Array<{ name: string; parameters: { parse(value: unknown): unknown }; execute: (args: any) => Promise<unknown> }> {
     const tools: Array<any> = [];
     const server = {
         addTool(tool: any) {
@@ -14,7 +17,7 @@ function registeredTools(readOnly = false): Array<{ name: string; parameters: { 
     } as unknown as FastMCP;
     const backend = { readNote: async () => "hello" } as VaultBackend;
     const registry = new VaultRegistry([
-        { id: "personal", name: "Personal", backend, searchIndex: new SearchIndex() },
+        { id: "personal", name: "Personal", backend, searchIndex: new SearchIndex(), ragStatus: ragStatus as never },
         { id: "work", name: "Work", backend, searchIndex: new SearchIndex() },
     ]);
 
@@ -58,5 +61,65 @@ describe("safe MCP tool catalog", () => {
     test("semantic search reports disabled without a RAG capability", async () => {
         const search = registeredTools().find(({ name }) => name === "search_notes")!;
         expect(await search.execute({ vault_id: "personal", query: "hello" })).toContain("disabled");
+    });
+
+    test("get_index_status returns stable disabled, ready, backfilling, and degraded states", async () => {
+        const states = [
+            {
+                enabled: true,
+                state: "ready",
+                model: "nomic-embed-text",
+                expected: 2,
+                indexed: 2,
+                backlog: 0,
+                failed: 0,
+                coverage: 1,
+                oldestJobAgeSeconds: null,
+                lastSuccessAt: "2026-10-13T00:00:00.000Z",
+                lastError: null,
+                lastReconciliationAt: "2026-10-13T00:00:00.000Z",
+                checkpoint: "42",
+            },
+            {
+                enabled: true,
+                state: "backfilling",
+                model: "nomic-embed-text",
+                expected: 2,
+                indexed: 1,
+                backlog: 1,
+                failed: 0,
+                coverage: 0.5,
+                oldestJobAgeSeconds: 3,
+                lastSuccessAt: null,
+                lastError: null,
+                lastReconciliationAt: null,
+                checkpoint: "41",
+            },
+            {
+                enabled: true,
+                state: "degraded",
+                model: "nomic-embed-text",
+                expected: 2,
+                indexed: 1,
+                backlog: 0,
+                failed: 1,
+                coverage: 0.5,
+                oldestJobAgeSeconds: null,
+                lastSuccessAt: null,
+                lastError: "RAG indexing failed (Error)",
+                lastReconciliationAt: null,
+                checkpoint: "41",
+            },
+        ] as const;
+
+        const disabledTool = registeredTools().find(({ name }) => name === "get_index_status")!;
+        const disabled = JSON.parse(String(await disabledTool.execute({ vault_id: "personal" })));
+        expect(disabled.rag).toMatchObject({ enabled: false, state: "disabled", coverage: 1 });
+
+        for (const status of states) {
+            const tool = registeredTools(false, () => status).find(({ name }) => name === "get_index_status")!;
+            const output = JSON.parse(String(await tool.execute({ vault_id: "personal" })));
+            expect(output.rag).toEqual(status);
+        }
     });
 });

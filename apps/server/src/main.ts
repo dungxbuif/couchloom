@@ -46,6 +46,7 @@ function loadExtraInstructions(): string | undefined {
 let configs;
 let rag: RagRuntime | null = null;
 let ragQueue: RagJobQueue | null = null;
+let reconciliationTimer: ReturnType<typeof setInterval> | null = null;
 try {
     configs = loadVaultConfigs();
     rag = RagRuntime.fromEnvironment();
@@ -74,6 +75,7 @@ const runtimes = configs.map((config) => new VaultRuntime(
     debugLogging,
     {
         ragQueue: ragQueue ?? undefined,
+        ragInventory: rag ?? undefined,
         ragApply: rag ? (vaultId, path, content, mtime) => rag!.apply(vaultId, path, content, mtime).then(() => undefined) : undefined,
     },
 ));
@@ -85,6 +87,19 @@ try {
         if (!runtime) throw new Error("RAG job references an unknown vault");
         await runtime.processRagJob(job.path);
     });
+    if (ragQueue) {
+        const reconcile = async () => {
+            const results = await Promise.allSettled(runtimes.map((runtime) => runtime.reconcileRag()));
+            const failures = results.filter((result) => result.status === "rejected").length;
+            if (failures > 0) console.error(`RAG reconciliation failed for ${failures} vault(s).`);
+        };
+        await reconcile();
+        reconciliationTimer = setInterval(
+            () => void reconcile(),
+            envInteger("RAG_RECONCILE_INTERVAL_MS", 300_000),
+        );
+        reconciliationTimer.unref();
+    }
 } catch (error) {
     await ragQueue?.close().catch(() => undefined);
     await Promise.allSettled(runtimes.map((runtime) => runtime.close()));
@@ -95,7 +110,7 @@ try {
 const registry = new VaultRegistry(runtimes.map((runtime) => ({
     ...runtime.context,
     semanticSearch: rag ? async (query: string, limit?: number) => (await rag!.search(query, [runtime.context.id], limit)).map(({ path, chunkIndex, content, score }) => ({ path, chunkIndex, content, score })) : undefined,
-    ragStatus: () => ({ enabled: !!rag, ...(rag ? { model: rag.model } : {}) }),
+    ragStatus: () => runtime.getRagStatus(),
 })));
 console.log(`CouchLoom loaded ${registry.list().length} vault(s): ${registry.list().map(({ id }) => id).join(", ")}`);
 
@@ -146,6 +161,9 @@ async function shutdown(): Promise<void> {
     shuttingDown = true;
     console.log("Shutting down...");
     const failures: unknown[] = [];
+    if (reconciliationTimer) clearInterval(reconciliationTimer);
+    const reconciliationResults = await Promise.allSettled(runtimes.map((runtime) => runtime.stopRagReconciliation()));
+    failures.push(...reconciliationResults.filter((result): result is PromiseRejectedResult => result.status === "rejected").map((result) => result.reason));
     await ragQueue?.close().catch((error) => failures.push(error));
     const vaultResults = await Promise.allSettled(runtimes.map((runtime) => runtime.close()));
     failures.push(...vaultResults.filter((result): result is PromiseRejectedResult => result.status === "rejected").map((result) => result.reason));

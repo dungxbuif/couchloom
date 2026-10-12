@@ -297,8 +297,25 @@ export function registerTools(
         parameters: z.object({ vault_id: z.string().describe("Vault id from list_vaults") }),
         execute: async ({ vault_id }) => {
             const context = registry.get(vault_id);
-            const rag = context.ragStatus?.() ?? { enabled: false };
-            return JSON.stringify({ vault_id, notes: context.searchIndex.size, checkpoint: context.searchIndex.since || null, rag });
+            const checkpoint = context.searchIndex.since || null;
+            const rag = context.ragStatus
+                ? await context.ragStatus()
+                : {
+                    enabled: false,
+                    state: "disabled" as const,
+                    model: null,
+                    expected: context.searchIndex.size,
+                    indexed: 0,
+                    backlog: 0,
+                    failed: 0,
+                    coverage: context.searchIndex.size === 0 ? 1 : 0,
+                    oldestJobAgeSeconds: null,
+                    lastSuccessAt: null,
+                    lastError: null,
+                    lastReconciliationAt: null,
+                    checkpoint,
+                };
+            return JSON.stringify({ vault_id, notes: context.searchIndex.size, checkpoint, rag });
         },
     });
 

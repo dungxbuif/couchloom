@@ -1,5 +1,5 @@
 import postgres, { type Sql } from "postgres";
-import type { SemanticResult, VectorDocument, VectorStore } from "./indexer.js";
+import type { SemanticResult, VectorDocument, VectorDocumentState, VectorStore } from "./indexer.js";
 
 function vector(values: number[]): string {
     if (!values.every(Number.isFinite)) throw new Error("Vector contains a non-finite value");
@@ -39,11 +39,27 @@ export class PgVectorStore implements VectorStore {
                 FOREIGN KEY (vault_id, path) REFERENCES rag_documents(vault_id, path) ON DELETE CASCADE
             )`);
         await this.#sql`CREATE INDEX IF NOT EXISTS rag_chunks_vault_path_idx ON rag_chunks (vault_id, path)`;
+        await this.#sql`CREATE INDEX IF NOT EXISTS rag_documents_vault_updated_idx ON rag_documents (vault_id, updated_at)`;
     }
 
     async getDocumentHash(vaultId: string, path: string): Promise<string | null> {
         const rows = await this.#sql<{ content_hash: string }[]>`SELECT content_hash FROM rag_documents WHERE vault_id = ${vaultId} AND path = ${path}`;
         return rows[0]?.content_hash ?? null;
+    }
+
+    async getDocumentState(vaultId: string, path: string): Promise<VectorDocumentState | null> {
+        const rows = await this.#sql<Array<{
+            path: string;
+            content_hash: string;
+            mtime: number;
+            embedding_model: string;
+            updated_at: Date;
+        }>>`
+            SELECT path, content_hash, mtime, embedding_model, updated_at
+            FROM rag_documents
+            WHERE vault_id = ${vaultId} AND path = ${path}`;
+        const row = rows[0];
+        return row ? mapDocumentState(row) : null;
     }
 
     async replaceDocument(document: VectorDocument): Promise<void> {
@@ -60,6 +76,29 @@ export class PgVectorStore implements VectorStore {
         await this.#sql`DELETE FROM rag_documents WHERE vault_id = ${vaultId} AND path = ${path}`;
     }
 
+    async listDocuments(vaultId: string): Promise<VectorDocumentState[]> {
+        const rows = await this.#sql<Array<{
+            path: string;
+            content_hash: string;
+            mtime: number;
+            embedding_model: string;
+            updated_at: Date;
+        }>>`
+            SELECT path, content_hash, mtime, embedding_model, updated_at
+            FROM rag_documents
+            WHERE vault_id = ${vaultId}
+            ORDER BY path`;
+        return rows.map(mapDocumentState);
+    }
+
+    async countDocuments(vaultId: string): Promise<number> {
+        const rows = await this.#sql<Array<{ count: string }>>`
+            SELECT count(*)::text AS count
+            FROM rag_documents
+            WHERE vault_id = ${vaultId}`;
+        return Number(rows[0]?.count ?? 0);
+    }
+
     async search(embedding: number[], vaultIds: string[], limit: number): Promise<SemanticResult[]> {
         if (embedding.length !== this.#dimensions) throw new Error("Search vector dimensions do not match store");
         const rows = await this.#sql<Array<{ vault_id: string; path: string; chunk_index: number; content: string; score: number }>>`
@@ -74,4 +113,20 @@ export class PgVectorStore implements VectorStore {
     async close(): Promise<void> {
         await this.#sql.end({ timeout: 5 });
     }
+}
+
+function mapDocumentState(row: {
+    path: string;
+    content_hash: string;
+    mtime: number;
+    embedding_model: string;
+    updated_at: Date;
+}): VectorDocumentState {
+    return {
+        path: row.path,
+        contentHash: row.content_hash,
+        mtime: Number(row.mtime),
+        embeddingModel: row.embedding_model,
+        updatedAt: row.updated_at.toISOString(),
+    };
 }

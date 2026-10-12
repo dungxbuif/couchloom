@@ -8,6 +8,6 @@ export { registerTools } from "./tools.js";
 export type { NoteInfo, NoteListing, VaultBackend, VaultChangeCallback } from "./vault-backend.js";
 export { LocalVault } from "./vault-local.js";
 export { Vault, type VaultConfig } from "./vault.js";
-export { VaultRegistry, type SemanticSearchResult, type VaultContext, type VaultSummary } from "./vault-registry.js";
+export { VaultRegistry, type RagState, type RagStatus, type SemanticSearchResult, type VaultContext, type VaultSummary } from "./vault-registry.js";
 export { isPathWritable, parseWriteFolders } from "./write-scope.js";
 export { watchMarkdownFiles, type LocalVaultWatcher } from "./watch-local.js";
