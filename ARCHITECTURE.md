@@ -6,8 +6,9 @@
 Obsidian (phone/desktop)
     ↕ LiveSync plugin
 CouchDB (cloud or local)
-    ↕ DirectFileManipulator (livesync-commonlib)
-MCP Server (this project)
+    ↕ acknowledgement-aware change stream
+MCP Server ── durable pg-boss queue ── Ollama embeddings
+    ↕ metadata tools          ↕          PostgreSQL + pgvector
     ↕ MCP protocol over HTTP
 AI Agents (Claude, Copilot, custom)
 ```
@@ -28,8 +29,10 @@ The MCP server sits between CouchDB (or the local filesystem) and AI agents. It 
 - Startup: loads persisted index, catches up via CouchDB `_changes` feed from stored `since` sequence
 - Live watcher: `_changes` feed with `live: true` for real-time updates. It
   hydrates an `_id` → path map before subscribing so pathless CouchDB hard
-  tombstones can evict metadata and vector rows, and advances `since` for every
-  event so reconnects resume from the latest observed sequence.
+  tombstones can evict metadata and vector rows. Metadata is applied first; a
+  RAG job is then durably enqueued. The `since` checkpoint advances only after
+  that callback succeeds, so a crash or PostgreSQL outage cannot acknowledge
+  work that exists only in memory.
 
 ## Metadata Index (`packages/core/src/search.ts`)
 
@@ -66,7 +69,9 @@ catchUp(since) via _changes feed
   → store new since
   ↓
 Start live _changes watcher (since: current)
-  → updates since on each change
+  → update metadata
+  → durably upsert singleton RAG job (vault_id:path)
+  → acknowledge the change and update since
 ```
 
 **Filesystem mode:**
@@ -91,6 +96,15 @@ Filesystem: full scan of all .md files
 - DB nuked (invalid `since`): `catchUp` errors, clears index, rebuilds from `since: "0"`
 - Volume nuked: no persisted index, full rebuild; auth tokens lost (users re-authenticate)
 - Crash during save: concurrent save guard prevents corruption; next restart rebuilds
+- PostgreSQL/Ollama outage: metadata remains available; jobs retry with bounded
+  exponential backoff and terminal failures move to `rag-index-dead-letter`.
+- Process restart: pending work survives in PostgreSQL. The worker rereads the
+  current note, making duplicate and stale events idempotent.
+- Index drift: startup and five-minute reconciliation enqueue missing, stale,
+  model-mismatched, and orphaned documents without overlapping runs.
+
+See [`docs/RAG_OPERATIONS.md`](docs/RAG_OPERATIONS.md) for the exact readiness,
+metrics, alert, redrive, and recovery contracts.
 
 ## Vault Backend (`packages/core/src/vault-backend.ts`)
 

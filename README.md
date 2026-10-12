@@ -22,11 +22,13 @@ or move.
 ## Capabilities
 
 - Multiple vaults, with one stable `vault_id` per CouchDB database.
-- Durable CouchDB `_changes` checkpoints and automatic re-indexing.
+- A durable PostgreSQL RAG queue: CouchDB `_changes` checkpoints advance only
+  after indexing work is stored, and periodic reconciliation repairs drift.
 - LiveSync chunk reconstruction, including supported E2E-encrypted vaults.
 - Semantic search filtered by one or more vault IDs.
 - Authenticated Streamable HTTP MCP at `/mcp`.
-- Liveness at `/health` and dependency readiness at `/ready`.
+- Liveness at `/health`, degraded-aware readiness at `/ready`, and private
+  Prometheus metrics at `/metrics`.
 
 ## MCP tools
 
@@ -87,8 +89,17 @@ RAG starts when `DATABASE_URL` is set. Required variables:
 | `EMBEDDING_DIMENSIONS` | Vector dimension matching the model |
 
 Optional tuning variables are `RAG_CHUNK_CHARS` (default `1800`) and
-`RAG_CHUNK_OVERLAP` (default `200`). Changing vector dimensions on an existing
+`RAG_CHUNK_OVERLAP` (default `200`). Queue and recovery defaults are
+`RAG_RETRY_LIMIT=10`, `RAG_RETRY_DELAY_SECONDS=1`,
+`RAG_RETRY_DELAY_MAX_SECONDS=900`, `RAG_JOB_HEARTBEAT_SECONDS=30`,
+`RAG_RECONCILE_INTERVAL_MS=300000`, `RAG_WORKER_CONCURRENCY=1`, and
+`RAG_SHUTDOWN_GRACE_MS=30000`. Changing vector dimensions on an existing
 database requires a planned index rebuild.
+
+Embedding inference in the VM100 profile is local-only: CouchLoom calls the
+private Ollama service on `couchloom-internal`; it does not send note content to
+a cloud embedding provider. See [`docs/RAG_OPERATIONS.md`](docs/RAG_OPERATIONS.md)
+for readiness states, alerts, queue inspection, redrive, and recovery.
 
 ## VM100 production
 
@@ -117,6 +128,7 @@ Architecture and policy details:
 
 - [`ARCHITECTURE.md`](ARCHITECTURE.md)
 - [`docs/RAG_ARCHITECTURE.md`](docs/RAG_ARCHITECTURE.md)
+- [`docs/RAG_OPERATIONS.md`](docs/RAG_OPERATIONS.md)
 - [`docs/SAFE_TOOL_SURFACE.md`](docs/SAFE_TOOL_SURFACE.md)
 - [`SECURITY.md`](SECURITY.md)
 

@@ -56,6 +56,15 @@ services:
       context: ../..
       dockerfile: Dockerfile
     restart: unless-stopped
+    init: true
+    read_only: true
+    cpus: "2.0"
+    mem_limit: 2g
+    stop_grace_period: 35s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     environment:
       DATABASE_URL: postgres://couchloom:${POSTGRES_PASSWORD}@couchloom-postgres:5432/couchloom
       VAULTS_CONFIG_FILE: /run/couchloom/vaults.json
@@ -67,9 +76,18 @@ services:
       EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:-768}
       RAG_CHUNK_CHARS: ${RAG_CHUNK_CHARS:-1800}
       RAG_CHUNK_OVERLAP: ${RAG_CHUNK_OVERLAP:-200}
+      RAG_RETRY_LIMIT: ${RAG_RETRY_LIMIT:-10}
+      RAG_RETRY_DELAY_SECONDS: ${RAG_RETRY_DELAY_SECONDS:-1}
+      RAG_RETRY_DELAY_MAX_SECONDS: ${RAG_RETRY_DELAY_MAX_SECONDS:-900}
+      RAG_JOB_HEARTBEAT_SECONDS: ${RAG_JOB_HEARTBEAT_SECONDS:-30}
+      RAG_RECONCILE_INTERVAL_MS: ${RAG_RECONCILE_INTERVAL_MS:-300000}
+      RAG_WORKER_CONCURRENCY: ${RAG_WORKER_CONCURRENCY:-1}
+      RAG_SHUTDOWN_GRACE_MS: ${RAG_SHUTDOWN_GRACE_MS:-30000}
     volumes:
       - couchloom_data:/data
       - ${COUCHLOOM_RUN_DIR:?Set COUCHLOOM_RUN_DIR}/vaults.json:/run/couchloom/vaults.json:ro
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
     networks:
       - internal
       - homelab
@@ -78,6 +96,12 @@ services:
         condition: service_healthy
       ollama-model:
         condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "bun", "-e", "const r=await fetch('http://127.0.0.1:8787/health');if(!r.ok)process.exit(1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
 volumes:
   couchloom_data:

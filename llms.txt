@@ -5,7 +5,11 @@ Multi-vault CouchDB/Obsidian LiveSync knowledge service for AI agents.
 ## Stable endpoints
 
 - GET /health: process liveness
-- GET /ready: vault and RAG dependency readiness
+- GET /ready: JSON core readiness plus rag.enabled/state/coverage/backlog/failed.
+  HTTP 200 includes RAG ready, backfilling, or degraded. HTTP 503 means the core
+  vault/metadata service is unavailable.
+- GET /metrics: unauthenticated private-network Prometheus metrics; never
+  contains note paths, queries, tokens, or credentials
 - POST /mcp: authenticated MCP Streamable HTTP endpoint
 
 ## MCP contract
@@ -15,12 +19,43 @@ Available tools: list_vaults, list_folders, list_tags, list_notes, read_note,
 get_note_metadata, search_notes, get_index_status, write_note, edit_note.
 Deletion and moving are intentionally unavailable.
 
+get_index_status returns per-vault metadata/RAG state: enabled, state, model,
+expected, indexed, backlog, failed, coverage, oldestJobAgeSeconds,
+lastSuccessAt, lastError, lastReconciliationAt, and checkpoint. Treat
+backfilling as usable but incomplete; treat degraded as usable metadata plus an
+operator action for RAG.
+
 ## Configuration
 
 Prefer VAULTS_CONFIG_FILE pointing to a JSON array conforming to
 docs/vaults.schema.json. RAG requires DATABASE_URL, EMBEDDING_BASE_URL,
 EMBEDDING_MODEL, and EMBEDDING_DIMENSIONS. MCP_AUTH_TOKEN enables bearer/OAuth
 authentication.
+
+Durable RAG defaults: RAG_RETRY_LIMIT=10, RAG_RETRY_DELAY_SECONDS=1,
+RAG_RETRY_DELAY_MAX_SECONDS=900, RAG_JOB_HEARTBEAT_SECONDS=30,
+RAG_RECONCILE_INTERVAL_MS=300000, RAG_WORKER_CONCURRENCY=1, and
+RAG_SHUTDOWN_GRACE_MS=30000. The queue names are rag-index and
+rag-index-dead-letter. A CouchDB checkpoint advances only after durable enqueue;
+the worker rereads current source content; reconciliation repairs missing,
+stale, model-mismatched, and orphaned rows.
+
+VM100 invariant: EMBEDDING_BASE_URL is the private
+http://couchloom-ollama:11434/v1 endpoint. Note content must not be sent to an
+external embedding API. PostgreSQL and Ollama have no published host ports.
+
+Metrics: couchloom_rag_documents_expected,
+couchloom_rag_documents_indexed, couchloom_rag_coverage_ratio,
+couchloom_rag_queue_jobs, couchloom_rag_oldest_job_age_seconds,
+couchloom_rag_retries_total, couchloom_rag_failures_total,
+couchloom_rag_reconciliation_duration_seconds,
+couchloom_rag_embedding_duration_seconds,
+couchloom_rag_search_duration_seconds, couchloom_couchdb_watcher_lag.
+
+Initial alerts: terminal failed jobs > 0; oldest queued job >= 600 seconds;
+coverage < 0.999 for 15 minutes after source changes; warm search p95 >= 0.3
+seconds; cold search p95 >= 1 second. Detailed commands and recovery steps are
+in docs/RAG_OPERATIONS.md.
 
 Clone normally; this repository has no Git submodules. Generate a bearer token
 with `openssl rand -hex 32`. Store the same secret as MCP_AUTH_TOKEN for
@@ -37,6 +72,7 @@ packages/core/lib/livesync-commonlib, imported from upstream commit
 - ARCHITECTURE.md
 - docs/MULTI_VAULT.md
 - docs/RAG_ARCHITECTURE.md
+- docs/RAG_OPERATIONS.md
 - docs/SAFE_TOOL_SURFACE.md
 - docs/OPENCLAW.md
 - docs/VM100_RUNBOOK.md
