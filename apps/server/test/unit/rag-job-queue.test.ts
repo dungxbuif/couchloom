@@ -15,11 +15,17 @@ class FakeBoss implements PgBossLike {
     readonly queueUpdates: Array<{ name: string; options: Record<string, unknown> }> = [];
     readonly upserts: Array<{ name: string; data: RagIndexJob; options: Record<string, unknown> }> = [];
     readonly jobs = new Map<string, StoredJob[]>();
+    readonly errorListeners: Array<(error: unknown) => void> = [];
     redriven = 0;
     stopped = false;
     worker?: (jobs: StoredJob[]) => Promise<void>;
 
     async start() {}
+
+    on(event: string, listener: (error: unknown) => void) {
+        if (event === "error") this.errorListeners.push(listener);
+        return this;
+    }
 
     async createQueue(name: string, options?: Record<string, unknown>) {
         this.queues.push({ name, options });
@@ -82,6 +88,8 @@ describe("RagJobQueue", () => {
         const boss = new FakeBoss();
         const queue = new RagJobQueue("postgres://unused", { boss });
 
+        expect(boss.errorListeners).toHaveLength(1);
+
         await queue.start();
 
         expect(boss.queues).toEqual([
@@ -95,6 +103,7 @@ describe("RagJobQueue", () => {
                     retryBackoff: true,
                     retryDelayMax: 900,
                     heartbeatSeconds: 30,
+                    expireInSeconds: 300,
                     deadLetter: RAG_DEAD_LETTER_QUEUE,
                 },
             },
@@ -108,6 +117,7 @@ describe("RagJobQueue", () => {
                     retryBackoff: true,
                     retryDelayMax: 900,
                     heartbeatSeconds: 30,
+                    expireInSeconds: 300,
                     deadLetter: RAG_DEAD_LETTER_QUEUE,
                 },
             },
@@ -132,6 +142,7 @@ describe("RagJobQueue", () => {
                 retryBackoff: true,
                 retryDelayMax: 900,
                 heartbeatSeconds: 30,
+                expireInSeconds: 300,
                 deadLetter: RAG_DEAD_LETTER_QUEUE,
             },
         });

@@ -90,8 +90,9 @@ manual trigger; pending jobs survive because PostgreSQL is durable.
    past work that cannot be enqueued.
 2. Inspect `couchloom-postgres` health, disk space, and logs; restore service
    without reinitializing its volume.
-3. Restart CouchLoom only if it does not reconnect. Its stored CouchDB
-   checkpoint resumes the change stream.
+3. After PostgreSQL is healthy, restart CouchLoom to rebuild both the pg-boss
+   and pgvector connection pools. Its stored CouchDB checkpoint resumes the
+   change stream, and durable queued work remains in PostgreSQL.
 4. Verify backlog drains, failed is zero, and coverage returns to 1.
 
 ### CouchDB change feed disconnected
@@ -181,6 +182,9 @@ CouchDB with write tools enabled.
 | `RAG_RETRY_DELAY_SECONDS` | `1` | initial retry delay |
 | `RAG_RETRY_DELAY_MAX_SECONDS` | `900` | exponential-backoff cap |
 | `RAG_JOB_HEARTBEAT_SECONDS` | `30` | active-job heartbeat |
+| `RAG_JOB_EXPIRE_SECONDS` | `300` | crashed-worker claim expiry |
+| `RAG_QUEUE_SUPERVISE_INTERVAL_SECONDS` | `30` | expired-claim scan interval |
+| `RAG_DATABASE_CONNECT_TIMEOUT_MS` | `5000` | queue reconnect attempt bound |
 | `RAG_RECONCILE_INTERVAL_MS` | `300000` | drift-repair interval |
 | `RAG_WORKER_CONCURRENCY` | `1` | simultaneous embedding jobs |
 | `RAG_SHUTDOWN_GRACE_MS` | `30000` | graceful queue-stop bound |

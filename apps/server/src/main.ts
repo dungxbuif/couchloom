@@ -60,6 +60,9 @@ try {
             retryDelaySeconds: envInteger("RAG_RETRY_DELAY_SECONDS", 1),
             retryDelayMaxSeconds: envInteger("RAG_RETRY_DELAY_MAX_SECONDS", 900),
             heartbeatSeconds: envInteger("RAG_JOB_HEARTBEAT_SECONDS", 30),
+            expireInSeconds: envInteger("RAG_JOB_EXPIRE_SECONDS", 300),
+            superviseIntervalSeconds: envInteger("RAG_QUEUE_SUPERVISE_INTERVAL_SECONDS", 30),
+            connectionTimeoutMs: envInteger("RAG_DATABASE_CONNECT_TIMEOUT_MS", 5_000),
             shutdownGraceMs: envInteger("RAG_SHUTDOWN_GRACE_MS", 30_000),
         });
         await ragQueue.start();

@@ -79,4 +79,11 @@ test("lists and isolates two vaults", async () => {
     expect(personal.result.content[0].text).toContain("personal-only");
     expect(personal.result.content[0].text).not.toContain("work-only");
     expect(work.result.content[0].text).toContain("work-only");
+
+    const personalStatus = await rpc("tools/call", { name: "get_index_status", arguments: { vault_id: "personal" } });
+    const workStatus = await rpc("tools/call", { name: "get_index_status", arguments: { vault_id: "work" } });
+    const personalJson = JSON.parse(personalStatus.result.content[0].text);
+    const workJson = JSON.parse(workStatus.result.content[0].text);
+    expect(personalJson).toMatchObject({ vault_id: "personal", notes: 1, rag: { enabled: false, state: "disabled" } });
+    expect(workJson).toMatchObject({ vault_id: "work", notes: 1, rag: { enabled: false, state: "disabled" } });
 });

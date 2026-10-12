@@ -26,6 +26,7 @@ export interface PgBossJob<T> {
 }
 
 export interface PgBossLike {
+    on(event: "error", listener: (error: unknown) => void): unknown;
     start(): Promise<unknown>;
     createQueue(name: string, options?: Record<string, unknown>): Promise<void>;
     updateQueue(name: string, options: Record<string, unknown>): Promise<void>;
@@ -51,6 +52,9 @@ export interface RagJobQueueOptions {
     retryDelaySeconds?: number;
     retryDelayMaxSeconds?: number;
     heartbeatSeconds?: number;
+    expireInSeconds?: number;
+    superviseIntervalSeconds?: number;
+    connectionTimeoutMs?: number;
     shutdownGraceMs?: number;
 }
 
@@ -61,28 +65,37 @@ export class RagJobQueue {
     readonly #retryDelaySeconds: number;
     readonly #retryDelayMaxSeconds: number;
     readonly #heartbeatSeconds: number;
+    readonly #expireInSeconds: number;
     readonly #shutdownGraceMs: number;
     #started = false;
+    #closing = false;
+    #lastQueueErrorLog = 0;
 
     constructor(databaseUrl: string, options: RagJobQueueOptions = {}) {
-        this.#boss = options.boss ?? (new PgBoss(databaseUrl) as unknown as PgBossLike);
+        const superviseIntervalSeconds = positiveInteger(
+            options.superviseIntervalSeconds ?? 30,
+            "superviseIntervalSeconds",
+        );
+        const connectionTimeoutMs = positiveInteger(options.connectionTimeoutMs ?? 5_000, "connectionTimeoutMs");
+        this.#boss = options.boss ?? (new PgBoss({
+            connectionString: databaseUrl,
+            superviseIntervalSeconds,
+            connectionTimeoutMillis: connectionTimeoutMs,
+        }) as unknown as PgBossLike);
+        this.#attachErrorHandler(this.#boss);
         this.#concurrency = positiveInteger(options.concurrency ?? 1, "concurrency");
         this.#retryLimit = nonNegativeInteger(options.retryLimit ?? 10, "retryLimit");
         this.#retryDelaySeconds = positiveInteger(options.retryDelaySeconds ?? 1, "retryDelaySeconds");
         this.#retryDelayMaxSeconds = positiveInteger(options.retryDelayMaxSeconds ?? 900, "retryDelayMaxSeconds");
         this.#heartbeatSeconds = positiveInteger(options.heartbeatSeconds ?? 30, "heartbeatSeconds");
+        this.#expireInSeconds = positiveInteger(options.expireInSeconds ?? 300, "expireInSeconds");
         this.#shutdownGraceMs = positiveInteger(options.shutdownGraceMs ?? 30_000, "shutdownGraceMs");
     }
 
     async start(): Promise<void> {
         if (this.#started) return;
-        await this.#boss.start();
-        await this.#boss.createQueue(RAG_DEAD_LETTER_QUEUE);
-        await this.#boss.createQueue(RAG_INDEX_QUEUE, {
-            policy: "standard",
-            ...this.#queuePolicy(),
-        });
-        await this.#boss.updateQueue(RAG_INDEX_QUEUE, this.#queuePolicy());
+        this.#closing = false;
+        await this.#startBoss(this.#boss);
         this.#started = true;
     }
 
@@ -95,7 +108,11 @@ export class RagJobQueue {
     }
 
     async work(handler: (job: RagIndexJob) => Promise<void>): Promise<void> {
-        await this.#boss.work(
+        await this.#registerWorker(this.#boss, handler);
+    }
+
+    async #registerWorker(boss: PgBossLike, handler: (job: RagIndexJob) => Promise<void>): Promise<void> {
+        await boss.work(
             RAG_INDEX_QUEUE,
             { batchSize: 1, localConcurrency: this.#concurrency },
             async (jobs) => {
@@ -133,8 +150,29 @@ export class RagJobQueue {
 
     async close(): Promise<void> {
         if (!this.#started) return;
-        await this.#boss.stop({ graceful: true, timeout: this.#shutdownGraceMs });
         this.#started = false;
+        this.#closing = true;
+        await this.#boss.stop({ graceful: true, timeout: this.#shutdownGraceMs });
+    }
+
+    async #startBoss(boss: PgBossLike): Promise<void> {
+        await boss.start();
+        await boss.createQueue(RAG_DEAD_LETTER_QUEUE);
+        await boss.createQueue(RAG_INDEX_QUEUE, {
+            policy: "standard",
+            ...this.#queuePolicy(),
+        });
+        await boss.updateQueue(RAG_INDEX_QUEUE, this.#queuePolicy());
+    }
+
+    #attachErrorHandler(boss: PgBossLike): void {
+        boss.on("error", () => {
+            const now = Date.now();
+            if (now - this.#lastQueueErrorLog >= 30_000) {
+                this.#lastQueueErrorLog = now;
+                console.error("RAG queue database operation failed; restart CouchLoom after PostgreSQL is healthy.");
+            }
+        });
     }
 
     #queuePolicy(): Record<string, unknown> {
@@ -144,6 +182,7 @@ export class RagJobQueue {
             retryBackoff: true,
             retryDelayMax: this.#retryDelayMaxSeconds,
             heartbeatSeconds: this.#heartbeatSeconds,
+            expireInSeconds: this.#expireInSeconds,
             deadLetter: RAG_DEAD_LETTER_QUEUE,
         };
     }
