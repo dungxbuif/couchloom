@@ -53,6 +53,9 @@ couchloom_rag_retries_total, couchloom_rag_failures_total,
 couchloom_rag_reconciliation_duration_seconds,
 couchloom_rag_embedding_duration_seconds,
 couchloom_rag_search_duration_seconds, couchloom_couchdb_watcher_lag.
+The retry counter increments when a failed worker attempt remains below the
+configured retry limit; terminal failures are represented by the failed queue
+gauge/dead-letter state.
 
 Initial alerts: terminal failed jobs > 0; oldest queued job >= 600 seconds;
 coverage < 0.999 for 15 minutes after source changes; warm search p95 >= 0.3

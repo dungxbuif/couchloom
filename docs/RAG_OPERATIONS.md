@@ -135,7 +135,7 @@ paths, note text, search queries, tokens, or credentials.
 | `couchloom_rag_coverage_ratio` | Indexed/expected, from 0 to 1 |
 | `couchloom_rag_queue_jobs{state}` | queued, active, retrying, failed jobs |
 | `couchloom_rag_oldest_job_age_seconds` | age of oldest queued/retrying job |
-| `couchloom_rag_retries_total` | observed retry attempts |
+| `couchloom_rag_retries_total` | failed attempts that pg-boss will retry before the configured limit |
 | `couchloom_rag_failures_total` | processing failures |
 | `couchloom_rag_reconciliation_duration_seconds` | reconciliation latency histogram |
 | `couchloom_rag_embedding_duration_seconds` | embed+persist latency histogram |

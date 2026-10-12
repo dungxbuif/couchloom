@@ -23,6 +23,7 @@ export interface PgBossJob<T> {
     state: "created" | "retry" | "active" | "completed" | "cancelled" | "failed";
     singletonKey: string | null;
     createdOn: Date;
+    retryCount?: number;
 }
 
 export interface PgBossLike {
@@ -105,18 +106,30 @@ export class RagJobQueue {
         });
     }
 
-    async work(handler: (job: RagIndexJob) => Promise<void>): Promise<void> {
-        await this.#registerWorker(this.#boss, handler);
+    async work(
+        handler: (job: RagIndexJob) => Promise<void>,
+        onRetry?: (vaultId: string) => void,
+    ): Promise<void> {
+        await this.#registerWorker(this.#boss, handler, onRetry);
     }
 
-    async #registerWorker(boss: PgBossLike, handler: (job: RagIndexJob) => Promise<void>): Promise<void> {
+    async #registerWorker(
+        boss: PgBossLike,
+        handler: (job: RagIndexJob) => Promise<void>,
+        onRetry?: (vaultId: string) => void,
+    ): Promise<void> {
         await boss.work(
             RAG_INDEX_QUEUE,
             { batchSize: 1, localConcurrency: this.#concurrency },
             async (jobs) => {
                 for (const job of jobs) {
                     validateJob(job.data);
-                    await handler(job.data);
+                    try {
+                        await handler(job.data);
+                    } catch (error) {
+                        if ((job.retryCount ?? 0) < this.#retryLimit) onRetry?.(job.data.vaultId);
+                        throw error;
+                    }
                 }
             },
         );

@@ -245,4 +245,28 @@ describe("RagJobQueue", () => {
         await queue.close();
         expect(boss.stopped).toBe(true);
     });
+
+    test("reports only failures that pg-boss will retry", async () => {
+        const boss = new FakeBoss();
+        const queue = new RagJobQueue("postgres://unused", { boss, retryLimit: 1 });
+        const retriedVaults: string[] = [];
+        await queue.start();
+        await queue.work(
+            async () => { throw new Error("embedding unavailable"); },
+            (vaultId) => retriedVaults.push(vaultId),
+        );
+
+        const job = (retryCount: number): StoredJob => ({
+            id: `attempt-${retryCount}`,
+            data: { vaultId: "personal", path: "notes/a.md" },
+            state: "active",
+            singletonKey: "personal:notes/a.md",
+            createdOn: new Date(),
+            retryCount,
+        });
+        await expect(boss.worker?.([job(0)])).rejects.toThrow("embedding unavailable");
+        await expect(boss.worker?.([job(1)])).rejects.toThrow("embedding unavailable");
+
+        expect(retriedVaults).toEqual(["personal"]);
+    });
 });

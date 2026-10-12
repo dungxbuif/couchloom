@@ -97,11 +97,14 @@ const runtimes = configs.map((config) => new VaultRuntime(
 try {
     await Promise.all(runtimes.map((runtime) => runtime.start()));
     const runtimeByVault = new Map(runtimes.map((runtime) => [runtime.config.id, runtime]));
-    await ragQueue?.work(async (job) => {
-        const runtime = runtimeByVault.get(job.vaultId);
-        if (!runtime) throw new Error("RAG job references an unknown vault");
-        await runtime.processRagJob(job.path);
-    });
+    await ragQueue?.work(
+        async (job) => {
+            const runtime = runtimeByVault.get(job.vaultId);
+            if (!runtime) throw new Error("RAG job references an unknown vault");
+            await runtime.processRagJob(job.path);
+        },
+        (vaultId) => metrics.recordRetry(vaultId),
+    );
     if (ragQueue) {
         const reconcile = async () => {
             const results = await Promise.allSettled(runtimes.map(async (runtime) => {
