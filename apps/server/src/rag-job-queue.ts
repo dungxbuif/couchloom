@@ -68,7 +68,6 @@ export class RagJobQueue {
     readonly #expireInSeconds: number;
     readonly #shutdownGraceMs: number;
     #started = false;
-    #closing = false;
     #lastQueueErrorLog = 0;
 
     constructor(databaseUrl: string, options: RagJobQueueOptions = {}) {
@@ -88,13 +87,12 @@ export class RagJobQueue {
         this.#retryDelaySeconds = positiveInteger(options.retryDelaySeconds ?? 1, "retryDelaySeconds");
         this.#retryDelayMaxSeconds = positiveInteger(options.retryDelayMaxSeconds ?? 900, "retryDelayMaxSeconds");
         this.#heartbeatSeconds = positiveInteger(options.heartbeatSeconds ?? 30, "heartbeatSeconds");
-        this.#expireInSeconds = positiveInteger(options.expireInSeconds ?? 300, "expireInSeconds");
+        this.#expireInSeconds = positiveInteger(options.expireInSeconds ?? 3_600, "expireInSeconds");
         this.#shutdownGraceMs = positiveInteger(options.shutdownGraceMs ?? 30_000, "shutdownGraceMs");
     }
 
     async start(): Promise<void> {
         if (this.#started) return;
-        this.#closing = false;
         await this.#startBoss(this.#boss);
         this.#started = true;
     }
@@ -151,7 +149,6 @@ export class RagJobQueue {
     async close(): Promise<void> {
         if (!this.#started) return;
         this.#started = false;
-        this.#closing = true;
         await this.#boss.stop({ graceful: true, timeout: this.#shutdownGraceMs });
     }
 

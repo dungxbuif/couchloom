@@ -44,9 +44,10 @@ current note, so stale updates and deletes converge safely.
 
 The `rag-index` queue defaults to one worker, 10 retry attempts, exponential
 backoff from one second capped at 900 seconds, a 30-second heartbeat, and the
-`rag-index-dead-letter` destination. A crashed worker's claim expires after 300
-seconds and a 30-second supervisor cycle reclaims it; live workers refresh the
-claim through heartbeats. Graceful shutdown stops queue processing and waits up
+`rag-index-dead-letter` destination. A job has a one-hour hard execution bound;
+a 30-second supervisor cycle and heartbeat detect abandoned work without forcing
+legitimate large-note embeddings into a five-minute window. Graceful shutdown
+stops queue processing and waits up
 to 30 seconds; uncompleted work remains durable.
 
 ## Reconciliation
@@ -70,7 +71,7 @@ while embeddings catch up.
 - `RAG_RETRY_DELAY_SECONDS`: initial retry delay, default `1`;
 - `RAG_RETRY_DELAY_MAX_SECONDS`: retry-delay cap, default `900`;
 - `RAG_JOB_HEARTBEAT_SECONDS`: active-job heartbeat, default `30`;
-- `RAG_JOB_EXPIRE_SECONDS`: crashed-worker claim expiry, default `300`;
+- `RAG_JOB_EXPIRE_SECONDS`: hard job execution bound, default `3600`;
 - `RAG_QUEUE_SUPERVISE_INTERVAL_SECONDS`: expired-claim scan, default `30`;
 - `RAG_DATABASE_CONNECT_TIMEOUT_MS`: queue reconnect attempt bound, default `5000`;
 - `RAG_RECONCILE_INTERVAL_MS`: reconciliation interval, default `300000`;
