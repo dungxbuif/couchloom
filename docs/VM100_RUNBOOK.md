@@ -114,3 +114,46 @@ runbooks, backup/restore checks, and full rebuild procedure are in
 - OpenClaw MCP probe succeeds with authenticated Streamable HTTP.
 - A temporary note can be created and then edited through MCP; deletion remains
   unavailable by design.
+
+## Production validation — 2026-10-13
+
+VM100 was upgraded from the retained image
+`couchloom:vm100-20261005-direct-couchdb`
+(`sha256:e2aeb316cb3d73b3e125a1402fc031c67dce0998d3154e12985a1356ec79605d`)
+to commit `bbe0243` and image
+`sha256:5b6e1d5c7540916615e51d5774fbe39e2b1cfdf8dd87cdbb12709d0cf1c7d526`.
+The immutable release is stored at `/opt/apps/couchloom/releases/bbe0243`.
+
+Before replacement, the following mode-`0600` rollback artifacts were created
+and verified readable under `/opt/apps/couchloom/run`:
+
+- `src-backup-20261013-0318.tgz`;
+- `env-backup-20261013-0318`;
+- `vaults-backup-20261013-0318.json`;
+- `postgres-backup-20261013-0318.dump` (custom-format dump verified with
+  `pg_restore --list`).
+
+The rollout completed at 03:34 Asia/Ho_Chi_Minh. PostgreSQL and Ollama retained
+their existing containers during the final replacement, and every service
+reported zero restarts. The hardened CouchLoom container was confirmed
+non-root/read-only with all capabilities dropped, `no-new-privileges`, a
+2-CPU limit, and a 2-GiB memory limit.
+
+Production data exposed a valid large-note embedding that ran longer than five
+minutes. The queue hard execution bound was therefore raised from 300 to 3600
+seconds while retaining a 30-second heartbeat and supervisor interval. The
+running and pending jobs were protected before the old bound elapsed, then the
+corrected image was rebuilt and redeployed. Final state was 1,357 expected and
+1,357 indexed documents, 6,074 chunks, coverage 1, backlog 0, and failed 0.
+
+The authenticated MCP smoke exercised list, metadata read, semantic search,
+create, and edit without recording note contents. Delete and move tools remained
+absent. Ten warm semantic searches measured p50 102.3 ms and p95 122.9 ms.
+The post-drill resource sample was CouchLoom 120.8 MiB/2 GiB, PostgreSQL
+91.96 MiB, and Ollama 316.6 MiB.
+
+A controlled Ollama outage began at 03:35:40. The designated fixture edit was
+immediately visible through metadata while RAG reported degraded with backlog
+1 and failed 0. After Ollama restarted, the queue returned to ready in 23
+seconds; the fixture was restored exactly through MCP and coverage returned to
+1 with backlog 0 and failed 0.

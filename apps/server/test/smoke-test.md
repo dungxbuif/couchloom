@@ -21,26 +21,26 @@ CouchLoom process. It must prove:
 
 ## Pre-rollout
 
-- [ ] `docker compose ... config --quiet`
-- [ ] clean build, unit, E2E, queue integration, and pgvector integration
-- [ ] readable mode-0600 backup of VM100 `.env` and `vaults.json`
-- [ ] readable PostgreSQL custom-format dump (`pg_restore --list`)
-- [ ] current image ID/tag and Git commit recorded as rollback identifiers
-- [ ] previous image retained locally
+- [x] `docker compose ... config --quiet`
+- [x] clean build, unit, E2E, queue integration, and pgvector integration
+- [x] readable mode-0600 backup of VM100 `.env` and `vaults.json`
+- [x] readable PostgreSQL custom-format dump (`pg_restore --list`)
+- [x] current image ID/tag and Git commit recorded as rollback identifiers
+- [x] previous image retained locally
 
 ## Production smoke
 
-- [ ] `couchloom`, `couchloom-postgres`, and `couchloom-ollama` healthy
-- [ ] zero unexpected container restarts
-- [ ] `/health` returns 200
-- [ ] `/ready` returns 200 and exposes RAG state/counts
-- [ ] `/metrics` returns Prometheus text without content/path/query labels
-- [ ] authenticated `list_vaults` and `get_index_status`
-- [ ] metadata list/read succeeds
-- [ ] semantic search returns a vault-scoped result
-- [ ] create/edit is restricted to configured write scope
-- [ ] delete/move/rename tools remain absent
-- [ ] reconciliation reaches current expected count, coverage 1, backlog 0,
+- [x] `couchloom`, `couchloom-postgres`, and `couchloom-ollama` healthy
+- [x] zero unexpected container restarts
+- [x] `/health` returns 200
+- [x] `/ready` returns 200 and exposes RAG state/counts
+- [x] `/metrics` returns Prometheus text without content/path/query labels
+- [x] authenticated `list_vaults` and `get_index_status`
+- [x] metadata list/read succeeds
+- [x] semantic search returns a vault-scoped result
+- [x] create/edit follows the configured unrestricted non-destructive policy
+- [x] delete/move/rename tools remain absent
+- [x] reconciliation reaches current expected count, coverage 1, backlog 0,
       and failed 0
 
 ## Controlled Ollama outage
@@ -48,27 +48,27 @@ CouchLoom process. It must prove:
 Use only the designated reversible fixture note and preserve its exact prior
 content before editing.
 
-- [ ] stop Ollama and record timestamp
-- [ ] edit fixture through allowed MCP write path
-- [ ] metadata read shows the edit while RAG shows retry/backlog
-- [ ] restart Ollama and verify its configured model
-- [ ] coverage returns to 1; backlog and failed return to 0
-- [ ] restore exact prior fixture content through MCP
-- [ ] coverage returns to 1 again
-- [ ] record recovery duration and max backlog without recording the path
+- [x] stop Ollama and record timestamp
+- [x] edit fixture through allowed MCP write path
+- [x] metadata read shows the edit while RAG shows retry/backlog
+- [x] restart Ollama and verify its configured model
+- [x] coverage returns to 1; backlog and failed return to 0
+- [x] restore exact prior fixture content through MCP
+- [x] coverage returns to 1 again
+- [x] record recovery duration and max backlog without recording the path
 
 ## Evidence
 
 | Field | Value |
 | --- | --- |
-| Git commit | pending |
-| New image | pending |
-| Rollback image | pending |
-| Config backup | pending |
-| PostgreSQL backup | pending |
-| Rollout time (Asia/Ho_Chi_Minh) | pending |
-| Final expected/indexed | pending |
-| Final backlog/failed/coverage | pending |
-| Controlled-outage recovery | pending |
-| Search latency sample | pending |
-| Container resource sample | pending |
+| Git commit | `bbe0243` |
+| New image | `sha256:5b6e1d5c7540916615e51d5774fbe39e2b1cfdf8dd87cdbb12709d0cf1c7d526` |
+| Rollback image | `sha256:e2aeb316cb3d73b3e125a1402fc031c67dce0998d3154e12985a1356ec79605d` |
+| Config backup | `env-backup-20261013-0318`, `vaults-backup-20261013-0318.json` |
+| PostgreSQL backup | `postgres-backup-20261013-0318.dump`, custom format verified readable |
+| Rollout time (Asia/Ho_Chi_Minh) | 2026-10-13 03:34 |
+| Final expected/indexed | 1,357 / 1,357; 6,074 chunks |
+| Final backlog/failed/coverage | 0 / 0 / 1 |
+| Controlled-outage recovery | 23 seconds after Ollama restart; max backlog 1; fixture restored exactly |
+| Search latency sample | 10 warm calls: p50 102.3 ms, p95 122.9 ms |
+| Container resource sample | CouchLoom 120.8 MiB/2 GiB; PostgreSQL 91.96 MiB; Ollama 316.6 MiB |

@@ -192,3 +192,19 @@ CouchDB with write tools enabled.
 Keep concurrency at one on VM100 unless measured CPU, memory, failure rate, and
 p95 latency demonstrate headroom. Never replace the VM100
 `EMBEDDING_BASE_URL=http://couchloom-ollama:11434/v1` with a public provider.
+
+## Latest production evidence
+
+The 2026-10-13 VM100 rollout of commit `bbe0243` reached 1,357/1,357 indexed
+documents and 6,074 chunks with coverage 1, backlog 0, and failed 0. A
+controlled Ollama outage kept metadata available, retained one pending change,
+and converged 23 seconds after Ollama restart. Ten warm semantic searches
+measured p50 102.3 ms and p95 122.9 ms. See
+[`docs/VM100_RUNBOOK.md`](VM100_RUNBOOK.md) for image, backup, rollback, and
+resource evidence.
+
+The rollout also demonstrated that five minutes is too short for a legitimate
+large-note batch on CPU Ollama. `RAG_JOB_EXPIRE_SECONDS=3600` is intentional:
+the one-hour value bounds genuine long work, while the 30-second heartbeat and
+supervisor detect an abandoned worker. Do not reduce the hard bound without
+measuring the largest production document workload.
