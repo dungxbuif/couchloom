@@ -3,10 +3,11 @@ import { timingSafeEqual } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { LEVEL_INFO, setGlobalLogFunction } from "octagonal-wheels/common/logger";
-import { parseWriteFolders, registerTools, VaultRegistry } from "@couchloom/core";
+import { parseWriteFolders, registerTools, VaultRegistry, type RagStatus } from "@couchloom/core";
 import { mountPasswordAuth, type AuthHandle } from "./auth.js";
 import { buildAllowedHosts, isHostAllowed, isOriginAllowed } from "./host-guard.js";
 import { loadVaultConfigs } from "./vault-config.js";
+import { aggregateReadiness, CouchLoomMetrics } from "./metrics.js";
 import { RagJobQueue } from "./rag-job-queue.js";
 import { RagRuntime } from "./rag-runtime.js";
 import { VaultRuntime } from "./vault-runtime.js";
@@ -27,6 +28,7 @@ const authToken = process.env.MCP_AUTH_TOKEN;
 const readOnly = process.env.READ_ONLY === "true";
 const writeFolders = parseWriteFolders(process.env.WRITE_FOLDERS);
 const baseDataDir = process.env.DATA_DIR ?? join(process.env.HOME ?? process.env.USERPROFILE ?? "/tmp", ".couchloom");
+const metrics = new CouchLoomMetrics();
 
 function loadExtraInstructions(): string | undefined {
     const file = process.env.MCP_INSTRUCTIONS_FILE?.trim();
@@ -76,7 +78,17 @@ const runtimes = configs.map((config) => new VaultRuntime(
     {
         ragQueue: ragQueue ?? undefined,
         ragInventory: rag ?? undefined,
-        ragApply: rag ? (vaultId, path, content, mtime) => rag!.apply(vaultId, path, content, mtime).then(() => undefined) : undefined,
+        ragApply: rag ? async (vaultId, path, content, mtime) => {
+            const started = performance.now();
+            try {
+                await rag!.apply(vaultId, path, content, mtime);
+            } catch (error) {
+                metrics.recordFailure(vaultId);
+                throw error;
+            } finally {
+                metrics.observeEmbedding(vaultId, (performance.now() - started) / 1000);
+            }
+        } : undefined,
     },
 ));
 try {
@@ -89,7 +101,14 @@ try {
     });
     if (ragQueue) {
         const reconcile = async () => {
-            const results = await Promise.allSettled(runtimes.map((runtime) => runtime.reconcileRag()));
+            const results = await Promise.allSettled(runtimes.map(async (runtime) => {
+                const started = performance.now();
+                try {
+                    await runtime.reconcileRag();
+                } finally {
+                    metrics.observeReconciliation(runtime.config.id, (performance.now() - started) / 1000);
+                }
+            }));
             const failures = results.filter((result) => result.status === "rejected").length;
             if (failures > 0) console.error(`RAG reconciliation failed for ${failures} vault(s).`);
         };
@@ -109,7 +128,14 @@ try {
 }
 const registry = new VaultRegistry(runtimes.map((runtime) => ({
     ...runtime.context,
-    semanticSearch: rag ? async (query: string, limit?: number) => (await rag!.search(query, [runtime.context.id], limit)).map(({ path, chunkIndex, content, score }) => ({ path, chunkIndex, content, score })) : undefined,
+    semanticSearch: rag ? async (query: string, limit?: number) => {
+        const started = performance.now();
+        try {
+            return (await rag!.search(query, [runtime.context.id], limit)).map(({ path, chunkIndex, content, score }) => ({ path, chunkIndex, content, score }));
+        } finally {
+            metrics.observeSearch(runtime.config.id, (performance.now() - started) / 1000);
+        }
+    } : undefined,
     ragStatus: () => runtime.getRagStatus(),
 })));
 console.log(`CouchLoom loaded ${registry.list().length} vault(s): ${registry.list().map(({ id }) => id).join(", ")}`);
@@ -148,7 +174,18 @@ if (authToken) {
 
 const server = new FastMCP(serverOptions);
 server.getApp().get("/health", (context) => context.json({ status: "ok" }));
-server.getApp().get("/ready", (context) => context.json({ status: "ready", vaults: registry.list().length, rag: !!rag }));
+server.getApp().get("/ready", async (context) => {
+    const statuses = await collectRagStatuses();
+    const readiness = aggregateReadiness(true, registry.list().length, statuses);
+    return context.json(readiness.body, readiness.httpStatus);
+});
+server.getApp().get("/metrics", async () => {
+    await collectRagStatuses();
+    return new Response(await metrics.metrics(), {
+        status: 200,
+        headers: { "Content-Type": metrics.contentType },
+    });
+});
 if (authToken) {
     auth = mountPasswordAuth(server.getApp(), baseUrl, authToken, join(baseDataDir, "server", "auth-tokens.json"));
     await auth.loadTokens();
@@ -190,6 +227,39 @@ server.start({
 console.log(`CouchLoom v${process.env.npm_package_version ?? "unknown"} listening on port ${port}`);
 
 process.on("unhandledRejection", (error) => console.error("Unhandled rejection:", error));
+
+async function collectRagStatuses(): Promise<RagStatus[]> {
+    const results = await Promise.allSettled(runtimes.map((runtime) => runtime.getRagStatus()));
+    const statuses = results.map((result, index): RagStatus => {
+        if (result.status === "fulfilled") return result.value;
+        const runtime = runtimes[index]!;
+        const expected = runtime.searchIndex.size;
+        return {
+            enabled: !!rag,
+            state: rag ? "degraded" : "disabled",
+            model: rag?.model ?? null,
+            expected,
+            indexed: 0,
+            backlog: 0,
+            failed: rag ? 1 : 0,
+            coverage: expected === 0 ? 1 : 0,
+            oldestJobAgeSeconds: null,
+            lastSuccessAt: null,
+            lastError: rag ? "RAG status unavailable" : null,
+            lastReconciliationAt: null,
+            checkpoint: runtime.searchIndex.since || null,
+        };
+    });
+    await Promise.all(statuses.map(async (status, index) => {
+        const vaultId = runtimes[index]!.config.id;
+        metrics.recordStatus(vaultId, status);
+        if (ragQueue) {
+            const stats = await ragQueue.stats(vaultId).catch(() => null);
+            if (stats) metrics.recordQueueStats(vaultId, stats);
+        }
+    }));
+    return statuses;
+}
 
 function envInteger(name: string, fallback: number, allowZero = false): number {
     const raw = process.env[name];

@@ -120,7 +120,11 @@ describe("E2E: Auth", () => {
         const ready = await fetch(`http://localhost:${PORT}/ready`);
         assert.equal(health.status, 200);
         assert.equal(ready.status, 200);
-        assert.equal((await ready.json() as any).vaults, 1);
+        const readiness = await ready.json() as any;
+        assert.equal(readiness.vaults, 1);
+        assert.equal(readiness.status, "ready");
+        assert.equal(readiness.rag.enabled, false);
+        assert.equal(readiness.rag.state, "disabled");
     });
 
     it("rejects unauthenticated requests", async () => {

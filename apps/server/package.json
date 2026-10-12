@@ -18,6 +18,7 @@
         "@couchloom/rag": "workspace:*",
         "fastmcp": "^3.34.0",
         "octagonal-wheels": "^0.1.39",
-        "pg-boss": "12.37.1"
+        "pg-boss": "12.37.1",
+        "prom-client": "15.1.3"
     }
 }
