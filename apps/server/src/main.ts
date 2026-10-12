@@ -7,6 +7,7 @@ import { parseWriteFolders, registerTools, VaultRegistry } from "@couchloom/core
 import { mountPasswordAuth, type AuthHandle } from "./auth.js";
 import { buildAllowedHosts, isHostAllowed, isOriginAllowed } from "./host-guard.js";
 import { loadVaultConfigs } from "./vault-config.js";
+import { RagJobQueue } from "./rag-job-queue.js";
 import { RagRuntime } from "./rag-runtime.js";
 import { VaultRuntime } from "./vault-runtime.js";
 
@@ -44,11 +45,25 @@ function loadExtraInstructions(): string | undefined {
 
 let configs;
 let rag: RagRuntime | null = null;
+let ragQueue: RagJobQueue | null = null;
 try {
     configs = loadVaultConfigs();
     rag = RagRuntime.fromEnvironment();
     await rag?.start();
+    if (rag) {
+        ragQueue = new RagJobQueue(process.env.DATABASE_URL!, {
+            concurrency: envInteger("RAG_WORKER_CONCURRENCY", 1),
+            retryLimit: envInteger("RAG_RETRY_LIMIT", 10, true),
+            retryDelaySeconds: envInteger("RAG_RETRY_DELAY_SECONDS", 1),
+            retryDelayMaxSeconds: envInteger("RAG_RETRY_DELAY_MAX_SECONDS", 900),
+            heartbeatSeconds: envInteger("RAG_JOB_HEARTBEAT_SECONDS", 30),
+            shutdownGraceMs: envInteger("RAG_SHUTDOWN_GRACE_MS", 30_000),
+        });
+        await ragQueue.start();
+    }
 } catch (error) {
+    await ragQueue?.close().catch(() => undefined);
+    await rag?.close().catch(() => undefined);
     console.error(`Invalid service configuration: ${(error as Error).message}`);
     process.exit(1);
 }
@@ -57,19 +72,29 @@ const runtimes = configs.map((config) => new VaultRuntime(
     config,
     baseDataDir,
     debugLogging,
-    rag ? (path, content, mtime) => rag!.apply(config.id, path, content, mtime).then(() => undefined) : undefined,
+    {
+        ragQueue: ragQueue ?? undefined,
+        ragApply: rag ? (vaultId, path, content, mtime) => rag!.apply(vaultId, path, content, mtime).then(() => undefined) : undefined,
+    },
 ));
 try {
     await Promise.all(runtimes.map((runtime) => runtime.start()));
+    const runtimeByVault = new Map(runtimes.map((runtime) => [runtime.config.id, runtime]));
+    await ragQueue?.work(async (job) => {
+        const runtime = runtimeByVault.get(job.vaultId);
+        if (!runtime) throw new Error("RAG job references an unknown vault");
+        await runtime.processRagJob(job.path);
+    });
 } catch (error) {
+    await ragQueue?.close().catch(() => undefined);
     await Promise.allSettled(runtimes.map((runtime) => runtime.close()));
+    await rag?.close().catch(() => undefined);
     console.error(`Vault startup failed: ${(error as Error).message}`);
     process.exit(1);
 }
-const registry = new VaultRegistry(runtimes.map(({ context }) => ({
-    ...context,
-    onDocumentChange: rag ? (path: string, content: string | null, mtime?: number) => rag!.apply(context.id, path, content, mtime).then(() => undefined) : undefined,
-    semanticSearch: rag ? async (query: string, limit?: number) => (await rag!.search(query, [context.id], limit)).map(({ path, chunkIndex, content, score }) => ({ path, chunkIndex, content, score })) : undefined,
+const registry = new VaultRegistry(runtimes.map((runtime) => ({
+    ...runtime.context,
+    semanticSearch: rag ? async (query: string, limit?: number) => (await rag!.search(query, [runtime.context.id], limit)).map(({ path, chunkIndex, content, score }) => ({ path, chunkIndex, content, score })) : undefined,
     ragStatus: () => ({ enabled: !!rag, ...(rag ? { model: rag.model } : {}) }),
 })));
 console.log(`CouchLoom loaded ${registry.list().length} vault(s): ${registry.list().map(({ id }) => id).join(", ")}`);
@@ -120,14 +145,14 @@ async function shutdown(): Promise<void> {
     if (shuttingDown) return;
     shuttingDown = true;
     console.log("Shutting down...");
-    const results = await Promise.allSettled([
-        ...runtimes.map((runtime) => runtime.close()),
-        ...(rag ? [rag.close()] : []),
-        ...(auth ? [auth.saveTokens()] : []),
-    ]);
-    const failed = results.filter(({ status }) => status === "rejected");
-    if (failed.length) console.error(`Shutdown completed with ${failed.length} error(s).`);
-    process.exit(failed.length ? 1 : 0);
+    const failures: unknown[] = [];
+    await ragQueue?.close().catch((error) => failures.push(error));
+    const vaultResults = await Promise.allSettled(runtimes.map((runtime) => runtime.close()));
+    failures.push(...vaultResults.filter((result): result is PromiseRejectedResult => result.status === "rejected").map((result) => result.reason));
+    await rag?.close().catch((error) => failures.push(error));
+    await auth?.saveTokens().catch((error) => failures.push(error));
+    if (failures.length) console.error(`Shutdown completed with ${failures.length} error(s).`);
+    process.exit(failures.length ? 1 : 0);
 }
 process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
@@ -147,3 +172,13 @@ server.start({
 console.log(`CouchLoom v${process.env.npm_package_version ?? "unknown"} listening on port ${port}`);
 
 process.on("unhandledRejection", (error) => console.error("Unhandled rejection:", error));
+
+function envInteger(name: string, fallback: number, allowZero = false): number {
+    const raw = process.env[name];
+    if (raw === undefined || raw === "") return fallback;
+    const value = Number(raw);
+    if (!Number.isInteger(value) || value < (allowZero ? 0 : 1)) {
+        throw new Error(`${name} must be ${allowZero ? "a non-negative" : "a positive"} integer`);
+    }
+    return value;
+}
