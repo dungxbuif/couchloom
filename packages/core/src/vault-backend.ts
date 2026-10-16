@@ -24,6 +24,8 @@ export interface VaultBackend {
     close(): Promise<void>;
     readNote(path: string): Promise<string | null>;
     writeNote(path: string, content: string): Promise<boolean>;
+    /** Atomically create a new note. False means an existing note won. */
+    createNote?(path: string, content: string): Promise<boolean>;
     deleteNote(path: string): Promise<boolean>;
     moveNote(from: string, to: string): Promise<boolean>;
     getMetadata(path: string): Promise<NoteInfo | null>;

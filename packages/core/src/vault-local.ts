@@ -26,7 +26,22 @@ export class LocalVault implements VaultBackend {
             }
             return real;
         } catch (e: any) {
-            if (e.code === "ENOENT") return full; // file doesn't exist yet (write)
+            if (e.code === "ENOENT") {
+                // A missing leaf can still have a parent symlink outside the vault.
+                let parent = dirname(full);
+                while (true) {
+                    try {
+                        const real = await realpath(parent);
+                        if (real !== this.root && !real.startsWith(this.root + sep)) throw new Error("Path traversal blocked");
+                        return full;
+                    } catch (error: any) {
+                        if (error.code !== "ENOENT") throw error;
+                        const next = dirname(parent);
+                        if (next === parent) throw new Error("Path traversal blocked");
+                        parent = next;
+                    }
+                }
+            }
             throw e;
         }
     }
@@ -52,6 +67,18 @@ export class LocalVault implements VaultBackend {
             return true;
         } catch {
             return false;
+        }
+    }
+
+    async createNote(path: string, content: string): Promise<boolean> {
+        const fullPath = await this.safePath(path);
+        await mkdir(dirname(fullPath), { recursive: true });
+        try {
+            await writeFile(fullPath, content, { encoding: "utf-8", flag: "wx" });
+            return true;
+        } catch (error: any) {
+            if (error.code === "EEXIST") return false;
+            throw error;
         }
     }
 

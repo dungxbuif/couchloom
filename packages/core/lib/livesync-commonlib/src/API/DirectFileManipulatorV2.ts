@@ -373,7 +373,7 @@ export class DirectFileManipulator implements LiveSyncLocalDBEnv {
      * @param type
      * @returns
      */
-    async put(path: string, data: string[] | Blob, info: FileInfo, _type: "newnote" | "plain" = "plain") {
+    async put(path: string, data: string[] | Blob, info: FileInfo, _type: "newnote" | "plain" = "plain", createOnly = false) {
         const id = await this.path2id(path as FilePathWithPrefix);
         const saveData = data instanceof Blob ? data : createBlob(data);
         const datatype = determineTypeFromBlob(saveData);
@@ -390,7 +390,7 @@ export class DirectFileManipulator implements LiveSyncLocalDBEnv {
             datatype: datatype,
         };
         Logger(`PUT: UPLOADING: ${path}`, LOG_LEVEL_VERBOSE);
-        const ret = await this.liveSyncLocalDB.putDBEntry(putDoc);
+        const ret = await this.liveSyncLocalDB.putDBEntry(putDoc, undefined, undefined, createOnly);
         if (ret) {
             Logger(`PUT: DONE: ${path}`, LOG_LEVEL_INFO);
             return true;

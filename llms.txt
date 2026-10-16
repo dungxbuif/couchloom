@@ -16,7 +16,7 @@ Multi-vault CouchDB/Obsidian LiveSync knowledge service for AI agents.
 
 Call list_vaults first. Pass vault_id to every note and search operation.
 Available tools: list_vaults, list_folders, list_tags, list_notes, read_note,
-get_note_metadata, search_notes, get_index_status, write_note, edit_note.
+get_note_metadata, search_notes, get_index_status, create_note, write_note, edit_note.
 Deletion and moving are intentionally unavailable.
 
 get_index_status returns per-vault metadata/RAG state: enabled, state, model,
@@ -81,3 +81,11 @@ packages/core/lib/livesync-commonlib, imported from upstream commit
 - docs/SAFE_TOOL_SURFACE.md
 - docs/OPENCLAW.md
 - docs/VM100_RUNBOOK.md
+
+Create-only API: create_note(vault_id:string,path:string,content:string).
+Requires deployment of the create-only source extension; verify tools/list.
+Existing/concurrently created path: conflict; never replace content or retry
+with another writer revision. Unsupported backend: capability error.
+READ_ONLY excludes the tool; WRITE_FOLDERS restricts paths. Successful creates
+await the existing durable RAG change hook; conflicts do not update the index.
+Detailed contract: docs/CREATE_ONLY.md.

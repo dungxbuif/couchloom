@@ -170,6 +170,7 @@ Ten tools are registered via FastMCP. Every note operation is scoped by
 | Tool | Reads from | Writes to |
 |---|---|---|
 | `read_note` | vault | — |
+| `create_note` | existence via atomic storage operation | new note + index + durable RAG hook |
 | `write_note` | — | vault + index |
 | `edit_note` | vault | vault + index |
 | `list_notes` | index (fallback: vault) | — |
@@ -215,3 +216,14 @@ The server TypeScript config maps `@couchloom/core` and `@couchloom/rag` to
 their public source entry points for development and unit tests. Production
 builds still consume the package exports from `dist`; tests therefore do not
 depend on generated files left in the working tree.
+
+## Atomic create-only storage
+
+The optional VaultBackend.createNote returns false on an existing path. Local
+creation uses exclusive file open; CouchDB metadata creation omits _rev and
+passes force=false. Content-addressed chunks may be written before a conflict,
+but the existing metadata/note and its index are preserved. LiveSync forwarding
+adds a default-false createOnly argument without changing ordinary write/update
+semantics. create_note uses the existing onDocumentChange durable enqueue hook
+only after a successful create; all queue/ack/reconciliation/metrics behavior
+from the production8f7a8e0 base remains present.

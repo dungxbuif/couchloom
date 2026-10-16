@@ -6,7 +6,7 @@ import { isPathWritable } from "./write-scope.js";
 
 const debugLogging = process.env.LOG_LEVEL === "debug";
 
-const WRITE_TOOLS = ["write_note", "edit_note"] as const;
+const WRITE_TOOLS = ["write_note", "edit_note", "create_note"] as const;
 
 export function registerTools(
     server: FastMCP,
@@ -58,6 +58,27 @@ export function registerTools(
             }
             const deepLink = makeDeepLink(name, path);
             return `[Open in Obsidian](${deepLink})\n\n---\n\n${content}`;
+        },
+    });
+
+    if (!readOnly) server.addTool({
+        name: "create_note",
+        description: "Create a new Markdown note atomically. Refuses to replace an existing note, including a concurrent human edit. Read back after success." + writeScopeNote,
+        parameters: z.object({
+            vault_id: z.string().describe("Vault id from list_vaults"),
+            path: z.string().describe("Vault-relative note path"),
+            content: z.string().describe("Full Markdown content"),
+        }),
+        execute: async ({ vault_id, path, content }) => {
+            const context = registry.get(vault_id);
+            if (!isPathWritable(path, writeFolders)) return denyWrite(path);
+            if (!context.backend.createNote) throw new Error("Backend does not support atomic creation");
+            const created = await context.backend.createNote(path, content);
+            if (!created) throw new Error(`Note already exists: ${path}`);
+            const now = Date.now();
+            context.searchIndex.update(path, content, now);
+            await context.onDocumentChange?.(path, content, now);
+            return `Note created: ${path}\n[Open in Obsidian](${makeDeepLink(context.name, path)})`;
         },
     });
 

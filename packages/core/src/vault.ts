@@ -315,6 +315,24 @@ export class Vault implements VaultBackend {
         });
     }
 
+    async createNote(path: string, content: string): Promise<boolean> {
+        this.validatePath(path);
+        clearHandlers();
+        const now = Date.now();
+        try {
+            const ok = await this.manipulator.put(path, createLiveSyncTextBlob(content), {
+                ctime: now,
+                mtime: now,
+                size: new TextEncoder().encode(content).byteLength,
+            }, "plain", true);
+            if (!ok) throw new Error("Failed to create note");
+            return true;
+        } catch (error: any) {
+            if (error.status === 409 || error.name === "conflict") return false;
+            throw error;
+        }
+    }
+
     async deleteNote(path: string): Promise<boolean> {
         this.validatePath(path);
         clearHandlers();

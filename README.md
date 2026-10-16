@@ -42,6 +42,7 @@ or move.
 | `get_note_metadata` | Read frontmatter, tags, links, and backlinks |
 | `search_notes` | Search the pgvector index by semantic similarity |
 | `get_index_status` | Inspect per-vault metadata/RAG state |
+| `create_note` | Create a new Markdown note; fail if the path already exists |
 | `write_note` | Create or replace a Markdown note |
 | `edit_note` | Append, prepend, or replace exact text |
 
@@ -142,3 +143,16 @@ MIT. CouchLoom derives from
 LiveSync compatibility source is vendored under
 `packages/core/lib/livesync-commonlib` from upstream commit
 `50d4ab9c1a7d4f59ab29c7555b8dfb2d69555e92` and retains the upstream license.
+
+## Create a note without replacing a human edit
+
+Use `create_note(vault_id, path, content)` for new captures and AI drafts. If the
+path exists or another writer wins the creation race, the call reports a conflict
+and keeps the existing content. Read that note before deciding on a new path.
+A separate read followed by write_note does not provide this protection.
+
+The tool uses the same authentication, READ_ONLY and WRITE_FOLDERS scope as
+other writes. A successful create updates metadata and awaits the existing
+durable RAG change hook; a conflict does not enqueue an index update.
+See [create-only behavior](docs/CREATE_ONLY.md). This source addition must be
+deployed before a running server advertises create_note in tools/list.

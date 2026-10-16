@@ -523,8 +523,8 @@ export class LiveSyncLocalDB {
     async storeDeletionAtRevision(path: FilePathWithPrefix | FilePath, baseRevision: string) {
         return await this.managers.entryManager.storeDeletionAtRevision(path, baseRevision);
     }
-    async putDBEntry(note: SavingEntry, onlyChunks?: boolean, conflictBaseRev?: string) {
-        return await this.managers.entryManager.putDBEntry(note, onlyChunks, conflictBaseRev);
+    async putDBEntry(note: SavingEntry, onlyChunks?: boolean, conflictBaseRev?: string, createOnly = false) {
+        return await this.managers.entryManager.putDBEntry(note, onlyChunks, conflictBaseRev, createOnly);
     }
 
     async getConflictedDoc(path: FilePathWithPrefix, rev: string): Promise<false | diff_result_leaf> {

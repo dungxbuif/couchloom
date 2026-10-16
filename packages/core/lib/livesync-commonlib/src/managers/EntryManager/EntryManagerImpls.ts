@@ -1,4 +1,5 @@
 import type PouchDB from "pouchdb-core";
+import { writeFileMetadata } from "./MetadataWrite.ts";
 import { Logger, LOG_LEVEL_VERBOSE, LOG_LEVEL_NOTICE } from "octagonal-wheels/common/logger";
 import {
     type SavingEntry,
@@ -155,7 +156,8 @@ export async function putDBEntry(
     managers: NecessaryManagers<"localDatabase" | "chunkManager" | "hashManager" | "splitter">,
     note: SavingEntry,
     onlyChunks?: boolean,
-    conflictBaseRev?: string
+    conflictBaseRev?: string,
+    createOnly = false
 ) {
     const { localDatabase, chunkManager, splitter } = managers;
 
@@ -206,21 +208,7 @@ export async function putDBEntry(
 
         return (
             (await serialized("file:" + filename, async () => {
-                if (conflictBaseRev) {
-                    newDoc._rev = conflictBaseRev;
-                } else {
-                    try {
-                        const old = await localDatabase.get(newDoc._id);
-                        newDoc._rev = old._rev;
-                    } catch (ex) {
-                        if (isErrorOfMissingDoc(ex)) {
-                            // NO OP/
-                        } else {
-                            throw ex;
-                        }
-                    }
-                }
-                const r = await localDatabase.put<PlainEntry | NewEntry>(newDoc, { force: true });
+                const r = await writeFileMetadata(localDatabase, newDoc, conflictBaseRev, createOnly);
                 if (r.ok) {
                     return r;
                 } else {

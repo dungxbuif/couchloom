@@ -112,7 +112,7 @@ export class EntryManager {
         return await storeDeletionByPathAtRevision(this.serviceHost, this, path, baseRevision);
     }
 
-    async putDBEntry(note: SavingEntry, onlyChunks?: boolean, conflictBaseRev?: string) {
-        return await putDBEntry(this.serviceHost, this, note, onlyChunks, conflictBaseRev);
+    async putDBEntry(note: SavingEntry, onlyChunks?: boolean, conflictBaseRev?: string, createOnly = false) {
+        return await putDBEntry(this.serviceHost, this, note, onlyChunks, conflictBaseRev, createOnly);
     }
 }
