@@ -4,12 +4,12 @@ set -eu
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
 LIVESYNC_IMAGE=${LIVESYNC_IMAGE:-livesync-cli:1.0.9-cli}
-LIVESYNC_SOURCE_DIR=${LIVESYNC_SOURCE_DIR:-/Users/dungxbuif/workspace/obsidian-livesync}
-LIVESYNC_VAULT_DIR=${LIVESYNC_VAULT_DIR:-/Users/dungxbuif/workspace/Obsidian Vault}
+LIVESYNC_SOURCE_DIR=${LIVESYNC_SOURCE_DIR:-/Users/dungxbuif/workspace/projects/obsidian-livesync}
+LIVESYNC_VAULT_DIR=${LIVESYNC_VAULT_DIR:-/Users/dungxbuif/workspace/vaults/secondbrain}
 LIVESYNC_STATE_ROOT=${LIVESYNC_STATE_ROOT:-"${HOME}/Library/Application Support/CouchLoom/livesync"}
 LIVESYNC_DB_DIR=${LIVESYNC_DB_DIR:-"$LIVESYNC_STATE_ROOT/obsidian-vault"}
 LIVESYNC_SETTINGS_PATH=${LIVESYNC_SETTINGS_PATH:-"$LIVESYNC_DB_DIR/settings.json"}
-LIVESYNC_VARS_FILE=${LIVESYNC_VARS_FILE:-/Users/dungxbuif/workspace/homelab/local_vars.json}
+LIVESYNC_VARS_FILE=${LIVESYNC_VARS_FILE:-/Users/dungxbuif/workspace/vaults/homelab/local_vars.json}
 
 die() {
     printf 'livesync: %s\n' "$1" >&2
