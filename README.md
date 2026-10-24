@@ -22,7 +22,10 @@ or move.
 ## Capabilities
 
 - Multiple vaults, with one stable `vault_id` per CouchDB database.
+- Explicit multi-vault configuration; CouchDB databases are not auto-discovered.
 - Durable CouchDB `_changes` checkpoints and automatic re-indexing.
+- MCP becomes available after metadata indexing; pgvector backfill continues
+  in the background on first deployment.
 - LiveSync chunk reconstruction, including supported E2E-encrypted vaults.
 - Semantic search filtered by one or more vault IDs.
 - Authenticated Streamable HTTP MCP at `/mcp`.
@@ -75,6 +78,11 @@ do not commit its value. OpenClaw receives the same secret as
 See [`docs/vaults.schema.json`](docs/vaults.schema.json) and
 [`docs/MULTI_VAULT.md`](docs/MULTI_VAULT.md) for the exact schema.
 
+For headless local Markdown mirroring, the optional upstream LiveSync CLI
+runner is documented in [`docs/LOCAL_LIVESYNC.md`](docs/LOCAL_LIVESYNC.md).
+The VM100 production service uses the vendored LiveSync common library directly
+against CouchDB; it does not run a second CLI sync node.
+
 ## RAG configuration
 
 RAG starts when `DATABASE_URL` is set. Required variables:
@@ -107,6 +115,16 @@ OpenClaw connects internally to `http://couchloom:8787/mcp` using a bearer
 token. See [`docs/VM100_RUNBOOK.md`](docs/VM100_RUNBOOK.md) and
 [`docs/OPENCLAW.md`](docs/OPENCLAW.md).
 
+The VM100 RAG deployment uses Ollama `nomic-embed-text` with 768-dimensional
+embeddings. Ollama runs CPU-only and is capped at `2.0` vCPU to protect the
+Proxmox host during backfill; GPU passthrough is not currently configured, so
+embedding throughput is intentionally limited.
+
+To add another vault, sync it to a dedicated CouchDB database, add one
+validated object to the runtime `vaults.json`, restart only CouchLoom, and
+verify it with `list_vaults`, `get_index_status`, and `search_notes`. See
+[`docs/MULTI_VAULT.md`](docs/MULTI_VAULT.md).
+
 ## Safety and source of truth
 
 CouchDB is always the source of truth. pgvector rows are derived and may be
@@ -116,6 +134,8 @@ rebuilt. Keep vault credentials and MCP tokens outside Git, prefer
 Architecture and policy details:
 
 - [`ARCHITECTURE.md`](ARCHITECTURE.md)
+- [`docs/APP_DESIGN.md`](docs/APP_DESIGN.md)
+- [`docs/MULTI_VAULT.md`](docs/MULTI_VAULT.md)
 - [`docs/RAG_ARCHITECTURE.md`](docs/RAG_ARCHITECTURE.md)
 - [`docs/SAFE_TOOL_SURFACE.md`](docs/SAFE_TOOL_SURFACE.md)
 - [`SECURITY.md`](SECURITY.md)

@@ -24,6 +24,7 @@ services:
     image: ollama/ollama:0.34.0
     container_name: couchloom-ollama
     restart: unless-stopped
+    cpus: "2.0"
     volumes:
       - ollama_data:/root/.ollama
     networks:

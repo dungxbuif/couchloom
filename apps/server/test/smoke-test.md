@@ -1,0 +1,193 @@
+# MCP Smoke Test
+
+Run this test against a live MCP server to verify all tools work end-to-end.
+Requires a connected vault (local or CouchDB). Uses a test vault — will create and delete notes.
+
+## Prerequisites
+
+- MCP server running and connected (via Claude Desktop, Claude Code, or MCP Inspector)
+- A vault with at least one existing note
+
+## Test Script
+
+Run each step in order. Each step builds on the previous.
+
+---
+
+### 1. Discovery — list folders and tags
+
+```
+list_vaults()
+list_folders(vault_id='testvault')
+list_tags(vault_id='testvault')
+list_notes(vault_id='testvault', sort_by='modified', limit=5)
+```
+
+**Expected**: Folders listed with note counts. Tags listed (may be empty). Recent notes shown with timestamps and deep links.
+
+---
+
+### 2. Create project notes with tags, links, and frontmatter
+
+```
+write_note(vault_id='testvault', path='test-smoke/project.md', content="""---
+title: Smoke Test Project
+tags: [smoke-test, project]
+status: active
+---
+
+# Smoke Test Project
+
+A project for testing MCP tools.
+
+## Links
+- [[test-smoke/notes]]
+- [[test-smoke/daily]]
+""")
+
+write_note(vault_id='testvault', path='test-smoke/notes.md', content="""---
+tags: [smoke-test, reference]
+---
+
+# Notes
+
+Reference material for [[test-smoke/project]].
+
+CouchDB uses a _changes feed for real-time sync. Compaction removes old revisions.
+""")
+
+write_note(vault_id='testvault', path='test-smoke/daily.md', content="""---
+tags: [smoke-test, daily]
+---
+
+# Daily Log
+
+- Ran smoke test on MCP tools
+- Verified search, tags, and backlinks
+
+See [[test-smoke/project]] for the main project.
+
+#standup
+""")
+```
+
+**Expected**: All three notes saved. Deep links returned.
+
+---
+
+### 3. Verify folder and tag discovery
+
+```
+list_folders(vault_id='testvault')
+list_tags(vault_id='testvault')
+```
+
+**Expected**: `test-smoke` folder appears with 3 notes. Tags include `smoke-test`, `project`, `reference`, `daily`, `standup`.
+
+---
+
+### 4. Name and tag filtering
+
+```
+list_notes(vault_id='testvault', name='notes')
+list_notes(vault_id='testvault', tag='smoke-test')
+list_notes(vault_id='testvault', tag='reference')
+list_notes(vault_id='testvault', tag='daily', folder='test-smoke')
+```
+
+**Expected**: First finds notes with "notes" in path. Second returns all 3 test notes. Third returns only `test-smoke/notes.md`. Fourth finds `test-smoke/daily.md`.
+
+---
+
+### 6. Knowledge graph — metadata and backlinks
+
+```
+get_note_metadata(vault_id='testvault', path='test-smoke/project.md')
+```
+
+**Expected**:
+- Frontmatter: title, tags, status
+- Tags: smoke-test, project
+- Outgoing links: test-smoke/notes, test-smoke/daily
+- Backlinks: test-smoke/notes.md, test-smoke/daily.md
+
+```
+get_note_metadata(vault_id='testvault', path='test-smoke/notes.md')
+```
+
+**Expected**:
+- Outgoing links: test-smoke/project
+- Backlinks: test-smoke/project.md
+
+---
+
+### 7. Edit — append
+
+```
+edit_note(vault_id='testvault', path='test-smoke/daily.md', content='- Append test passed')
+read_note(vault_id='testvault', path='test-smoke/daily.md')
+```
+
+**Expected**: "Append test passed" appears at end of note.
+
+---
+
+### 8. Edit — prepend (after frontmatter)
+
+```
+edit_note(vault_id='testvault', path='test-smoke/project.md', content='> Status: All tests passing', operation='prepend')
+read_note(vault_id='testvault', path='test-smoke/project.md')
+```
+
+**Expected**: "> Status: All tests passing" appears after frontmatter, before "# Smoke Test Project".
+
+---
+
+### 9. Edit — replace
+
+```
+edit_note(vault_id='testvault', path='test-smoke/project.md', content='status: complete', operation='replace', old_text='status: active')
+read_note(vault_id='testvault', path='test-smoke/project.md')
+```
+
+**Expected**: Frontmatter now shows `status: complete`.
+
+---
+
+### 10. Verify safe tool surface
+
+```
+tools/list
+```
+
+**Expected**: `write_note` and `edit_note` are present; `delete_note` and
+`move_note` are absent.
+
+---
+
+### 11. Time-based filtering
+
+```
+list_notes(vault_id='testvault', modified_after='2020-01-01', sort_by='modified', limit=3)
+```
+
+**Expected**: Returns up to 3 most recently modified notes.
+
+```
+list_notes(vault_id='testvault', modified_after='invalid-date')
+```
+
+**Expected**: Error message about invalid date format.
+
+---
+
+### 12. Cleanup
+
+Delete the temporary `test-smoke` folder manually in Obsidian. Agent-facing
+MCP intentionally provides no cleanup/delete operation.
+
+---
+
+## Pass Criteria
+
+All 12 steps return expected results. No errors except the intentional invalid date test.

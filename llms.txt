@@ -36,7 +36,17 @@ packages/core/lib/livesync-commonlib, imported from upstream commit
 - README.md
 - ARCHITECTURE.md
 - docs/MULTI_VAULT.md
+- docs/APP_DESIGN.md
 - docs/RAG_ARCHITECTURE.md
 - docs/SAFE_TOOL_SURFACE.md
 - docs/OPENCLAW.md
 - docs/VM100_RUNBOOK.md
+
+## Multi-vault behavior
+
+CouchLoom does not auto-discover CouchDB databases. Add each vault explicitly
+to the runtime `VAULTS_CONFIG_FILE` array with a unique stable `vault_id`, a
+dedicated CouchDB database, and matching LiveSync encryption settings. Restart
+the server after changes, then verify `list_vaults`, `get_index_status`, and
+`search_notes` for the new ID. Each vault has an independent `_changes`
+checkpoint, metadata namespace, and pgvector namespace.

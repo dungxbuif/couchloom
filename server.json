@@ -1,0 +1,128 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.dungxbuif/couchloom",
+  "description": "Multi-vault CouchDB RAG and safe note access for AI agents.",
+  "repository": {
+    "url": "https://github.com/dungxbuif/couchloom.git",
+    "source": "github"
+  },
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "couchloom",
+      "version": "0.1.0",
+      "transport": {
+        "type": "streamable-http",
+        "url": "http://localhost:8787/mcp"
+      },
+      "environmentVariables": [
+        {
+          "description": "Path to your Obsidian vault directory (filesystem mode)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "VAULT_PATH"
+        },
+        {
+          "description": "CouchDB server URL (CouchDB mode)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "COUCHDB_URL"
+        },
+        {
+          "description": "CouchDB username",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "COUCHDB_USER"
+        },
+        {
+          "description": "CouchDB password (required in CouchDB mode)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": true,
+          "name": "COUCHDB_PASSWORD"
+        },
+        {
+          "description": "CouchDB database name",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "COUCHDB_DATABASE"
+        },
+        {
+          "description": "LiveSync E2E encryption passphrase (must match plugin setting)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": true,
+          "name": "COUCHDB_PASSPHRASE"
+        },
+        {
+          "description": "Set to 'true' if 'Obfuscate Properties' is enabled in LiveSync (obfuscates file paths, sizes, dates). Auto-detected from existing vaults at startup; only decides the format for a brand-new empty database",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "COUCHDB_OBFUSCATE_PROPERTIES"
+        },
+        {
+          "description": "Vault name for deep links and index storage",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "VAULT_NAME"
+        },
+        {
+          "description": "Password for OAuth authentication",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": true,
+          "name": "MCP_AUTH_TOKEN"
+        },
+        {
+          "description": "Comma-separated extra Host/Origin values accepted in no-auth mode (e.g. '192.168.1.5,mybox.local'). Localhost is always allowed; ignored when MCP_AUTH_TOKEN is set.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "MCP_ALLOWED_HOSTS"
+        },
+        {
+          "description": "Public URL for OAuth callbacks (required when using a tunnel)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "BASE_URL"
+        },
+        {
+          "description": "HTTP port",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "PORT"
+        },
+        {
+          "description": "Set to 'true' to disable write_note and edit_note. Delete and move are never exposed.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "READ_ONLY"
+        },
+        {
+          "description": "Extra text appended to the MCP instructions string (the server-side system prompt). Use to bake vault-specific conventions (folder structure, naming rules, folders to avoid) so they apply across every MCP client.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "MCP_INSTRUCTIONS"
+        },
+        {
+          "description": "Path to a file whose contents are appended to the MCP instructions. Easier than MCP_INSTRUCTIONS for multi-line conventions. File wins if both are set.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "MCP_INSTRUCTIONS_FILE"
+        }
+      ]
+    }
+  ]
+}
