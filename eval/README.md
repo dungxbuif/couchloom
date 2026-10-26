@@ -1,5 +1,23 @@
 # Retrieval evaluation
 
+## Required vault inventory
+
+Run `bun test tools/audit-vault-coverage.test.ts` to test the inventory gate.
+Run the read-only production audit with:
+
+```sh
+ssh vm100 'docker exec -i couchloom bun -' < tools/audit-vault-coverage.ts
+```
+
+The deployment inventory requires both `personal` and `homelab` in configuration
+and authenticated MCP. Missing either returns a nonzero exit status. Database
+discovery denial is reported separately: `_all_dbs` access is not required for
+ordinary application operation. Passing registration does not prove freshness,
+complete source indexing or retrieval quality. Per-vault RAG `coverage=1` only
+describes registered vaults, not the required deployment inventory.
+
+## Diagnostic retrieval cases
+
 `retrieval-cases.json` freezes both six-question probes from the October 26 audit.
 It is a 12-case diagnostic set covering only three known notes, not a held-out
 quality benchmark. Each case labels one expected source; other returned sources
