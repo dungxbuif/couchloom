@@ -91,6 +91,7 @@ Use existing CouchDB multi-vault configuration because it preserves LiveSync and
 ## Execution ledger
 
 - 2026-10-26: Existing isolated app worktree retained; unrelated checkouts unchanged. Baseline unit run: 115 core + 3 RAG + 70 server tests pass; app build passes.
+- Baseline `bun run test:e2e`: 32 pass, 0 fail in 98.48 seconds, including multi-vault isolation and durable RAG recovery against disposable dependencies. This is local regression evidence; it does not prove Homelab is configured in production. Separate pgvector, obfuscation and create-only suites remain to run for this rollout.
 - Inventory checker: four tests first failed because the checker was absent, then passed. Live read-only execution exited 1 with `config=homelab; MCP=homelab`, correctly exposing incomplete registration. No production configuration changed.
 - Credential prerequisite: local `op account list` reports one configured account, but `op whoami` reports account not signed in. VM100 and Pi5 do not have `op` in the SSH session PATH. Requested user unlock/sign-in without requesting secret values. Continue independent tests and inventory while awaiting authenticated injection.
 - Ruling: keep registration acceptance in an operator audit instead of changing `/ready` semantics for all CouchLoom installations. Two required vault IDs belong to this deployment, not every user's app. Cost: deployment automation must invoke this gate.
