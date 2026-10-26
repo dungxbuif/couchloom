@@ -18,6 +18,28 @@ describes registered vaults, not the required deployment inventory.
 
 ## Diagnostic retrieval cases
 
+The runner also accepts a private JSON array at `EVAL_CASES_FILE` (a path inside
+the process running it). Each case has a unique `id`, nonempty `query`, `vaultId`
+and `expected`, which is one path or an array of alternative acceptable paths:
+
+```json
+[
+  {"id":"lab-01","vaultId":"homelab","query":"Where does application compute run?","expected":["index.md","docs/STACK.md"]},
+  {"id":"unsupported-01","vaultId":"personal","query":"What is my unrecorded future appointment?","expected":[]}
+]
+```
+
+These examples illustrate the schema, not reviewed quality labels. An empty
+`expected` marks an unsupported question: it is excluded from hit@5/MRR@5 and
+requires separate answer/abstention review. Returning no matches for an
+answerable question counts as a miss; disabled search or malformed responses
+fail the run. Alternatives mean **any one** acceptable source, not multi-note
+evidence recall. Missing `vaultId` defaults to `personal` for the original
+diagnostic set. Reports include a normalized dataset SHA-256, per-vault metrics,
+denominators and nearest-rank p50/p95 latency. External files are never labelled
+held-out or reviewed automatically. Keep private datasets and output paths out
+of the public repository. Run `bun test tools/rag-eval.test.ts` for scoring tests.
+
 `retrieval-cases.json` freezes both six-question probes from the October 26 audit.
 It is a 12-case diagnostic set covering only three known notes, not a held-out
 quality benchmark. Each case labels one expected source; other returned sources
