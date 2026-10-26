@@ -1,0 +1,14 @@
+[
+  {"id":"original-vi-pool","query":"Khi gọi Close, kết nối được đóng hẳn hay trả lại pool?","expected":"wiki/engineering/database/connection-pools.md"},
+  {"id":"original-en-pool","query":"Does closing a borrowed database connection return it to the pool?","expected":"wiki/engineering/database/connection-pools.md"},
+  {"id":"original-vi-redis","query":"Lệnh nào lấy top 10 người đứng đầu bảng xếp hạng Redis kèm điểm?","expected":"wiki/engineering/caching/redis.md"},
+  {"id":"original-en-redis","query":"Which Redis command returns the top ten leaderboard members with scores?","expected":"wiki/engineering/caching/redis.md"},
+  {"id":"original-vi-chain","query":"Indexer blockchain có thông lượng backfill và độ trễ commit bao nhiêu theo ghi chú?","expected":"wiki/concepts/blockchain.md"},
+  {"id":"original-en-chain","query":"What backfill throughput and commit latency are recorded for the blockchain indexer?","expected":"wiki/concepts/blockchain.md"},
+  {"id":"revised-vi-pool","query":"Connection pool trong Node.js nên cấu hình và giám sát thế nào?","expected":"wiki/engineering/database/connection-pools.md"},
+  {"id":"revised-en-pool","query":"How should a Node.js database connection pool be configured and monitored?","expected":"wiki/engineering/database/connection-pools.md"},
+  {"id":"revised-vi-redis","query":"Redis leaderboard dùng sorted set và ZREVRANGE như thế nào?","expected":"wiki/engineering/caching/redis.md"},
+  {"id":"revised-en-redis","query":"How do Redis sorted sets implement a leaderboard with ZREVRANGE?","expected":"wiki/engineering/caching/redis.md"},
+  {"id":"revised-vi-chain","query":"Blockchain đánh đổi throughput và latency như thế nào?","expected":"wiki/concepts/blockchain.md"},
+  {"id":"revised-en-chain","query":"What trade-off does a blockchain make between throughput and latency?","expected":"wiki/concepts/blockchain.md"}
+]

@@ -45,7 +45,7 @@ export interface VectorStore {
     deleteDocument(vaultId: string, path: string): Promise<void>;
     listDocuments(vaultId: string): Promise<VectorDocumentState[]>;
     countDocuments(vaultId: string): Promise<number>;
-    search(embedding: number[], vaultIds: string[], limit: number): Promise<SemanticResult[]>;
+    search(embedding: number[], vaultIds: string[], limit: number, folder?: string): Promise<SemanticResult[]>;
     close(): Promise<void>;
 }
 
@@ -91,9 +91,9 @@ export class RagIndexer {
         return "indexed";
     }
 
-    async search(query: string, vaultIds: string[], limit = 8): Promise<SemanticResult[]> {
+    async search(query: string, vaultIds: string[], limit = 8, folder?: string): Promise<SemanticResult[]> {
         const [embedding] = await this.embeddings.embed([query]);
         if (!embedding || embedding.length !== this.embeddings.dimensions) throw new Error("Invalid query embedding dimensions");
-        return this.store.search(embedding, vaultIds, Math.max(1, Math.min(limit, 50)));
+        return this.store.search(embedding, vaultIds, Math.max(1, Math.min(limit, 50)), folder);
     }
 }

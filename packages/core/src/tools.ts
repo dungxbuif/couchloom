@@ -177,16 +177,17 @@ export function registerTools(
 
     server.addTool({
         name: "search_notes",
-        description: "Semantically search indexed Markdown chunks within one vault.",
+        description: "Search indexed Markdown within one vault, returning the best chunk per note. Use folder to scope to a known source such as wiki or a project; omit it to search the whole vault. Scores indicate similarity, not factual confidence. Read source notes before making claims.",
         parameters: z.object({
             vault_id: z.string().describe("Vault id from list_vaults"),
             query: z.string().min(1).describe("Natural-language search query"),
+            folder: z.string().optional().describe("Optional literal folder path, including descendants; no wildcard matching"),
             limit: z.coerce.number().int().min(1).max(50).optional().describe("Maximum results, default 8"),
         }),
-        execute: async ({ vault_id, query, limit }) => {
+        execute: async ({ vault_id, query, limit, folder }) => {
             const context = registry.get(vault_id);
             if (!context.semanticSearch) return `Semantic search is disabled for vault: ${vault_id}`;
-            const results = await context.semanticSearch(query, limit ?? 8);
+            const results = await context.semanticSearch(query, limit ?? 8, folder);
             if (!results.length) return `No semantic matches found in vault: ${vault_id}`;
             return results.map((result) => {
                 const link = makeDeepLink(context.name, result.path);

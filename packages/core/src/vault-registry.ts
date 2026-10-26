@@ -7,7 +7,7 @@ export interface VaultContext {
     backend: VaultBackend;
     searchIndex: SearchIndex;
     onDocumentChange?: (path: string, content: string | null, mtime?: number) => Promise<void>;
-    semanticSearch?: (query: string, limit?: number) => Promise<SemanticSearchResult[]>;
+    semanticSearch?: (query: string, limit?: number, folder?: string) => Promise<SemanticSearchResult[]>;
     ragStatus?: () => RagStatus | Promise<RagStatus>;
 }
 

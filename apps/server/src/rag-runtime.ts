@@ -39,8 +39,8 @@ export class RagRuntime {
         return this.#indexer.apply({ vaultId, path, content, mtime });
     }
 
-    search(query: string, vaultIds: string[], limit?: number): Promise<SemanticResult[]> {
-        return this.#indexer.search(query, vaultIds, limit);
+    search(query: string, vaultIds: string[], limit?: number, folder?: string): Promise<SemanticResult[]> {
+        return this.#indexer.search(query, vaultIds, limit, folder);
     }
 
     listDocuments(vaultId: string): Promise<VectorDocumentState[]> {

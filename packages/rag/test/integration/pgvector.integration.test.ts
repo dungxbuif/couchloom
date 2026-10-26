@@ -118,6 +118,23 @@ test("persists, isolates, searches, and deletes vectors", async () => {
     expect(await store.getDocumentHash("integration-a", "note.md")).toBeNull();
 });
 
+test("folder filtering is literal, boundary-aware, and applied before top-k", async () => {
+    const paths = ["wiki/a.md", "wiki/b.md", "wiki-other/c.md", "raw/d.md", "wiki%/e.md"];
+    try {
+        for (const [i, path] of paths.entries()) {
+            await store.replaceDocument({ vaultId: "folder-test", path, mtime: 1, contentHash: path, embeddingModel: "test",
+                chunks: [{ index: 0, content: path, embedding: [1, 0.1 * (paths.length - i), 0] }] });
+        }
+        expect((await store.search([1, 0, 0], ["folder-test"], 2, "wiki")).map(r => r.path)).toEqual(["wiki/b.md", "wiki/a.md"]);
+        expect((await store.search([1, 0, 0], ["folder-test"], 2, "wiki/")).map(r => r.path)).toEqual(["wiki/b.md", "wiki/a.md"]);
+        expect((await store.search([1, 0, 0], ["folder-test"], 2, "wiki%")).map(r => r.path)).toEqual(["wiki%/e.md"]);
+        expect(await store.search([1, 0, 0], ["another-vault"], 2, "wiki")).toEqual([]);
+        expect(await store.search([1, 0, 0], [], 2)).toEqual([]);
+    } finally {
+        for (const path of paths) await store.deleteDocument("folder-test", path);
+    }
+});
+
 async function docker(...args: string[]): Promise<string> {
     const result = await execFileAsync("docker", args, { timeout: 60_000 });
     return result.stdout.trim();

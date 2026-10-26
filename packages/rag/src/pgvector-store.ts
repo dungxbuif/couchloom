@@ -99,8 +99,10 @@ export class PgVectorStore implements VectorStore {
         return Number(rows[0]?.count ?? 0);
     }
 
-    async search(embedding: number[], vaultIds: string[], limit: number): Promise<SemanticResult[]> {
+    async search(embedding: number[], vaultIds: string[], limit: number, folder?: string): Promise<SemanticResult[]> {
         if (embedding.length !== this.#dimensions) throw new Error("Search vector dimensions do not match store");
+        if (!vaultIds.length) return [];
+        const prefix = folder?.replace(/^\/+|\/+$/g, "");
         const rows = await this.#sql<Array<{ vault_id: string; path: string; chunk_index: number; content: string; score: number }>>`
             WITH ranked AS (
                 SELECT vault_id, path, chunk_index, content,
@@ -111,6 +113,7 @@ export class PgVectorStore implements VectorStore {
                     ) AS path_rank
                 FROM rag_chunks
                 WHERE vault_id IN ${this.#sql(vaultIds)}
+                    AND starts_with(path, ${prefix ? `${prefix}/` : ""})
             )
             SELECT vault_id, path, chunk_index, content, score
             FROM ranked

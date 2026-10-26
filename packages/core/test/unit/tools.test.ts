@@ -26,6 +26,22 @@ function registeredTools(
 }
 
 describe("safe MCP tool catalog", () => {
+    test("search tool passes folder scope to retrieval and preserves citations", async () => {
+        const tools: any[] = [];
+        const registry = new VaultRegistry([{
+            id: "personal", name: "Personal", backend: {} as VaultBackend, searchIndex: new SearchIndex(),
+            semanticSearch: async (query, limit, folder) => {
+                expect({ query, limit, folder }).toEqual({ query: "redis", limit: 3, folder: "wiki" });
+                return [{ path: "wiki/redis.md", chunkIndex: 0, content: "Sorted sets", score: 0.8 }];
+            },
+        }]);
+        registerTools({ addTool: (tool: any) => tools.push(tool) } as unknown as FastMCP, registry, true);
+        const search = tools.find(t => t.name === "search_notes");
+        const args = search.parameters.parse({ vault_id: "personal", query: "redis", limit: 3, folder: "wiki" });
+        const result = await search.execute(args);
+        expect(result).toContain("[wiki/redis.md](obsidian:");
+        expect(result).toContain("Sorted sets");
+    });
     test("allows reads, creation, and edits without destructive tools", () => {
         const names = registeredTools().map(({ name }) => name);
         expect(names).toContain("list_vaults");

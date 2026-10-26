@@ -134,10 +134,10 @@ try {
 }
 const registry = new VaultRegistry(runtimes.map((runtime) => ({
     ...runtime.context,
-    semanticSearch: rag ? async (query: string, limit?: number) => {
+    semanticSearch: rag ? async (query: string, limit?: number, folder?: string) => {
         const started = performance.now();
         try {
-            return (await rag!.search(query, [runtime.context.id], limit)).map(({ path, chunkIndex, content, score }) => ({ path, chunkIndex, content, score }));
+            return (await rag!.search(query, [runtime.context.id], limit, folder)).map(({ path, chunkIndex, content, score }) => ({ path, chunkIndex, content, score }));
         } finally {
             metrics.observeSearch(runtime.config.id, (performance.now() - started) / 1000);
         }
