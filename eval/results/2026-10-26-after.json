@@ -1,0 +1,70 @@
+{
+  "measuredAt": "2026-10-26T14:44:21.343Z",
+  "dataset": "retrieval-cases-v1-diagnostic-not-held-out",
+  "folder": null,
+  "hitAt5": 0.5,
+  "mrrAt5": 0.34027777777777773,
+  "allUnique": true,
+  "results": [
+    {
+      "id": "original-vi-pool",
+      "rank": 1,
+      "latencyMs": 3769
+    },
+    {
+      "id": "original-en-pool",
+      "rank": 4,
+      "latencyMs": 284
+    },
+    {
+      "id": "original-vi-redis",
+      "rank": null,
+      "latencyMs": 307
+    },
+    {
+      "id": "original-en-redis",
+      "rank": 3,
+      "latencyMs": 419
+    },
+    {
+      "id": "original-vi-chain",
+      "rank": null,
+      "latencyMs": 587
+    },
+    {
+      "id": "original-en-chain",
+      "rank": 1,
+      "latencyMs": 547
+    },
+    {
+      "id": "revised-vi-pool",
+      "rank": null,
+      "latencyMs": 505
+    },
+    {
+      "id": "revised-en-pool",
+      "rank": null,
+      "latencyMs": 393
+    },
+    {
+      "id": "revised-vi-redis",
+      "rank": 1,
+      "latencyMs": 310
+    },
+    {
+      "id": "revised-en-redis",
+      "rank": 2,
+      "latencyMs": 510
+    },
+    {
+      "id": "revised-vi-chain",
+      "rank": null,
+      "latencyMs": 568
+    },
+    {
+      "id": "revised-en-chain",
+      "rank": null,
+      "latencyMs": 636
+    }
+  ]
+}

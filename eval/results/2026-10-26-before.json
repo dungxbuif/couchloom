@@ -1,0 +1,69 @@
+{
+  "measuredAt": "2026-10-26T14:37:44.170Z",
+  "dataset": "retrieval-cases-v1-diagnostic-not-held-out",
+  "hitAt5": 0.5,
+  "mrrAt5": 0.34027777777777773,
+  "allUnique": true,
+  "results": [
+    {
+      "id": "original-vi-pool",
+      "rank": 1,
+      "latencyMs": 248
+    },
+    {
+      "id": "original-en-pool",
+      "rank": 4,
+      "latencyMs": 233
+    },
+    {
+      "id": "original-vi-redis",
+      "rank": null,
+      "latencyMs": 313
+    },
+    {
+      "id": "original-en-redis",
+      "rank": 3,
+      "latencyMs": 202
+    },
+    {
+      "id": "original-vi-chain",
+      "rank": null,
+      "latencyMs": 723
+    },
+    {
+      "id": "original-en-chain",
+      "rank": 1,
+      "latencyMs": 269
+    },
+    {
+      "id": "revised-vi-pool",
+      "rank": null,
+      "latencyMs": 503
+    },
+    {
+      "id": "revised-en-pool",
+      "rank": null,
+      "latencyMs": 1632
+    },
+    {
+      "id": "revised-vi-redis",
+      "rank": 1,
+      "latencyMs": 561
+    },
+    {
+      "id": "revised-en-redis",
+      "rank": 2,
+      "latencyMs": 202
+    },
+    {
+      "id": "revised-vi-chain",
+      "rank": null,
+      "latencyMs": 236
+    },
+    {
+      "id": "revised-en-chain",
+      "rank": null,
+      "latencyMs": 280
+    }
+  ]
+}

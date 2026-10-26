@@ -29,3 +29,17 @@ Next acceptance gate: 40–60 independently reviewed Vietnamese/English question
 across multiple folders, with evidence passages, alternate correct sources,
 multi-note and unanswerable cases. Compare index variants separately and keep
 the final test split out of tuning. Do not re-embed production in place.
+
+## October 26 measured update
+
+Authenticated MCP results are preserved in `results/2026-10-26-*.json`.
+Before (`ae9d28c`) and after (`9541933`) unrestricted retrieval both score 6/12
+known-note hit@5, MRR@5 0.3403. Explicit `folder=wiki` scores 9/12 and MRR@5
+0.6111. All expected paths in this diagnostic set are in wiki, so this comparison
+has source-location information and must not be generalized to all questions.
+
+Production readiness remains coverage 1, backlog 0, failed 0. Five sampled
+stored vectors matched fresh embeddings (cosine approximately 1). This does not
+establish consistency for all chunks or quality for Vietnamese. The original
+Vietnamese Redis case and both revised English pool/blockchain cases still miss.
+Observed latency includes spikes of 2.6–3.8 seconds; no latency SLO is certified.
