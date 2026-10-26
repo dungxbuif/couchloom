@@ -47,18 +47,48 @@ beforeAll(async () => {
     await store.migrate();
     storeReady = true;
     await store.deleteDocument("integration-a", "note.md");
+    await store.deleteDocument("integration-diversity", "duplicate.md");
+    await store.deleteDocument("integration-diversity", "distinct.md");
     await store.deleteDocument("integration-b", "note.md");
 }, 60_000);
 
 afterAll(async () => {
     if (storeReady) {
         await store.deleteDocument("integration-a", "note.md");
+        await store.deleteDocument("integration-diversity", "duplicate.md");
+        await store.deleteDocument("integration-diversity", "distinct.md");
         await store.deleteDocument("integration-b", "note.md");
     }
     if (store) {
         await store.close();
     }
     if (containerName) await docker("rm", "-f", containerName).catch(() => undefined);
+});
+
+test("returns diverse note paths before extra chunks from the same note", async () => {
+    await store.replaceDocument({
+        vaultId: "integration-diversity",
+        path: "duplicate.md",
+        mtime: 1,
+        contentHash: "duplicate",
+        embeddingModel: "test",
+        chunks: [
+            { index: 0, content: "duplicate one", embedding: [1, 0, 0] },
+            { index: 1, content: "duplicate two", embedding: [0.99, 0.01, 0] },
+        ],
+    });
+    await store.replaceDocument({
+        vaultId: "integration-diversity",
+        path: "distinct.md",
+        mtime: 1,
+        contentHash: "distinct",
+        embeddingModel: "test",
+        chunks: [{ index: 0, content: "distinct", embedding: [0.9, 0.1, 0] }],
+    });
+
+    const results = await store.search([1, 0, 0], ["integration-diversity"], 2);
+
+    expect(results.map(({ path }) => path)).toEqual(["duplicate.md", "distinct.md"]);
 });
 
 test("persists, isolates, searches, and deletes vectors", async () => {

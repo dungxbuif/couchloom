@@ -102,10 +102,20 @@ export class PgVectorStore implements VectorStore {
     async search(embedding: number[], vaultIds: string[], limit: number): Promise<SemanticResult[]> {
         if (embedding.length !== this.#dimensions) throw new Error("Search vector dimensions do not match store");
         const rows = await this.#sql<Array<{ vault_id: string; path: string; chunk_index: number; content: string; score: number }>>`
-            SELECT vault_id, path, chunk_index, content, 1 - (embedding <=> ${vector(embedding)}::vector) AS score
-            FROM rag_chunks
-            WHERE vault_id = ANY(${this.#sql.array(vaultIds)})
-            ORDER BY embedding <=> ${vector(embedding)}::vector
+            WITH ranked AS (
+                SELECT vault_id, path, chunk_index, content,
+                    1 - (embedding <=> ${vector(embedding)}::vector) AS score,
+                    row_number() OVER (
+                        PARTITION BY vault_id, path
+                        ORDER BY embedding <=> ${vector(embedding)}::vector, chunk_index
+                    ) AS path_rank
+                FROM rag_chunks
+                WHERE vault_id = ANY(${this.#sql.array(vaultIds)})
+            )
+            SELECT vault_id, path, chunk_index, content, score
+            FROM ranked
+            WHERE path_rank = 1
+            ORDER BY score DESC, vault_id, path
             LIMIT ${limit}`;
         return rows.map((row) => ({ vaultId: row.vault_id, path: row.path, chunkIndex: row.chunk_index, content: row.content, score: Number(row.score) }));
     }
