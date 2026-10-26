@@ -110,7 +110,7 @@ export class PgVectorStore implements VectorStore {
                         ORDER BY embedding <=> ${vector(embedding)}::vector, chunk_index
                     ) AS path_rank
                 FROM rag_chunks
-                WHERE vault_id = ANY(${this.#sql.array(vaultIds)})
+                WHERE vault_id IN ${this.#sql(vaultIds)}
             )
             SELECT vault_id, path, chunk_index, content, score
             FROM ranked
