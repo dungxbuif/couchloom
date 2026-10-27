@@ -47,11 +47,14 @@ export class VaultRuntime {
     async start(): Promise<void> {
         await this.backend.init();
         await this.searchIndex.loadFromDisk();
+        const hasPersistedCouchDbCheckpoint = this.config.mode === "couchdb" && Boolean(this.searchIndex.since);
         await this.#rebuildIndex();
-        await this.#ragQueue;
+        if (hasPersistedCouchDbCheckpoint && this.#onDocumentChange) {
+            await this.#queueRagReconciliation();
+        }
         console.log(`[vault:${this.config.id}] Search index built: ${this.searchIndex.size} notes.`);
         await this.#startWatcher();
-        console.log(`[vault:${this.config.id}] ready (${this.config.mode}).`);
+        console.log(`[vault:${this.config.id}] ready (${this.config.mode}); RAG backfill continues in background.`);
     }
 
     async save(): Promise<void> {
@@ -100,6 +103,15 @@ export class VaultRuntime {
             if (content !== null) this.#enqueueRag(path, content, mtime);
         }
         await this.save();
+    }
+
+    /** Requeue persisted notes after a restart so an interrupted RAG backfill resumes. */
+    async #queueRagReconciliation(): Promise<void> {
+        for (const { path, mtime } of this.searchIndex.listWithMtime()) {
+            const content = await this.backend.readNote(path);
+            if (content !== null) this.#enqueueRag(path, content, mtime);
+        }
+        console.log(`[vault:${this.config.id}] Queued RAG reconciliation for ${this.searchIndex.size} notes.`);
     }
 
     async #startWatcher(): Promise<void> {

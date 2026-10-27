@@ -14,6 +14,35 @@ AI Agents (Claude, Copilot, custom)
 
 The MCP server sits between CouchDB (or the local filesystem) and AI agents. It provides tools for interacting with an Obsidian vault.
 
+## Production topology
+
+The VM100 profile runs CouchLoom as a private Compose application:
+
+```text
+Obsidian + LiveSync
+        |
+        v
+Pi5 CouchDB / homelab-net  <---- CouchLoom (VM100)
+                                  |       |
+                                  v       v
+                         PostgreSQL/pgvector  Ollama
+                                  |
+                                  v
+                         authenticated MCP /mcp
+```
+
+Only CouchLoom joins the existing `homelab-net` overlay. PostgreSQL and the
+long-running Ollama service stay on the private `couchloom-internal` bridge;
+the deployment publishes no host ports. Ollama currently serves
+`nomic-embed-text` over an internal OpenAI-compatible endpoint and is capped at
+2 vCPU on VM100. The exact operational procedure is in
+[`docs/VM100_RUNBOOK.md`](docs/VM100_RUNBOOK.md).
+
+The service is configuration-driven rather than CouchDB-database-discovery
+driven. Every configured CouchDB database becomes one registry entry with its
+own checkpoint, metadata index namespace, and RAG namespace. See
+[`docs/MULTI_VAULT.md`](docs/MULTI_VAULT.md).
+
 ## Modes
 
 ### Filesystem mode (`VAULT_PATH`)
@@ -188,6 +217,23 @@ livesync-commonlib is a Deno-style TypeScript library compiled for Node via tsup
 - **FastMCP** — MCP server framework
 - **Hono** — HTTP framework (used by FastMCP, we add OAuth routes)
 - **PouchDB** — CouchDB client (transitive via livesync-commonlib)
+
+## Data-flow contracts
+
+1. LiveSync writes canonical documents to CouchDB.
+2. CouchLoom consumes CouchDB `_changes`, reconstructs Markdown, and updates
+   the per-vault metadata index/checkpoint.
+3. The RAG runtime chunks changed Markdown, requests embeddings, and stores
+   derived rows in pgvector keyed by `(vault_id, path, chunk_index)`.
+4. MCP read/search tools resolve a configured `vault_id` and never cross
+   vault namespaces.
+5. MCP writes go back through the LiveSync-compatible backend; subsequent
+   `_changes` events reconcile the same state.
+
+Metadata readiness and RAG readiness are deliberately separate. MCP can serve
+after metadata indexing while the first vector backfill continues in the
+background. Restarting with a persisted CouchDB checkpoint requeues RAG
+reconciliation without rebuilding the source database.
 
 ## Test layout
 
